@@ -8,6 +8,7 @@ namespace ParkRoutePlanner
         static void Main()
         {
             // טבלת מרחקים בין המתקנים (8 מתקנים)
+            //מתקן נוסף
             int[,] distances = {
                 { 0, 12, 18, 25, 30, 40, 22, 10 },
                 { 12, 0, 10, 35, 15, 28, 16, 20 },

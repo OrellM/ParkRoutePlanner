@@ -12,7 +12,7 @@ namespace ParkRoutePlanner
         private static Dictionary<int, List<int>> futureLoad;
         private static int[,] adjMatrix;
         private static int[] rideDuration;
-        private static int[] userPreferences;
+       // private static int[] userPreferences;
         private static int startNode;
 
         private static void CopyToFinal(int[] currPath)
