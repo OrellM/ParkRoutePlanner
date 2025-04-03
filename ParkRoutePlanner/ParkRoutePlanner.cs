@@ -5,14 +5,17 @@ namespace ParkRoutePlanner
 {
     public class ParkRoutePlanner
     {
+        private static int callsCounter = 0;  // ספירת קריאות לפונקציה
+        private static int prunedPaths = 0;   // ספירת מסלולים שנחתכו
+
         private static int N;
         private static int[] finalPath;
         private static bool[] visited;
         private static int finalRes = int.MaxValue;
-        private static Dictionary<int, List<int>> futureLoad;
+        private static Dictionary<TimeOnly, List<int>> futureLoad;
         private static int[,] adjMatrix;
         private static int[] rideDuration;
-       // private static int[] userPreferences;
+        private static int[] userPreferences;
         private static int startNode;
 
         private static void CopyToFinal(int[] currPath)
@@ -20,18 +23,15 @@ namespace ParkRoutePlanner
             Array.Copy(currPath, finalPath, N);
             finalPath[N] = currPath[0];
         }
-
+        //time= מספר הדקות שהמשתמש הולך להיות במתקנים קודמים לאטרקציה + מספר הדקות שלוקח לו להגיע עד לאטרקציה החדשה
         private static int GetFutureLoad(int attraction, int time)
         {
-            if (futureLoad.ContainsKey(attraction))
+            TimeOnly hour = TimeOnly.FromDateTime(DateTime.Now).AddMinutes(time);
+            if (futureLoad.ContainsKey(hour))
             {
-                var loads = futureLoad[attraction];
+                var loads = futureLoad[hour];
 
-                // בדיקה שהאינדקס בטווח המותר
-                if (time >= 0 && time < loads.Count)
-                {
-                    return loads[time];
-                }
+                return loads[attraction-1];
             }
 
             return 0; // במקרה שאין נתונים, מחזירים 0
@@ -69,6 +69,8 @@ namespace ParkRoutePlanner
 
         private static void TSPRec(int currBound, int currWeight, int level, int[] currPath, int currTime)
         {
+            callsCounter++;  // סופרים כל קריאה לפונקציה
+
             if (level == N)
             {
                 if (adjMatrix[currPath[level - 1], currPath[0]] != 0)
@@ -90,11 +92,25 @@ namespace ParkRoutePlanner
                     int temp = currBound;
                     int travelTime = adjMatrix[currPath[level - 1], i];
                     int rideTime = rideDuration[i];
-                    int waitTime = GetFutureLoad(i, currTime + travelTime);
+                    int load = GetFutureLoad(i, currTime + travelTime);
+                    int waitTime = (load / 10) * rideTime;
                     int totalTime = travelTime + rideTime + waitTime;
 
+                   /* // השפעת העדפות המבקר על זמן ההמתנה
+                    if (userPreferences[i] == 1)
+                        waitTime = (int)(waitTime * 0.7); // העדפה גבוהה – מקטינים את זמן ההמתנה ב-30%
+                    else
+                        waitTime = (int)(waitTime * 1.5); // העדפה נמוכה – מגדילים את זמן ההמתנה ב-50%
+                   */
                     currWeight += totalTime;
                     currTime += totalTime;
+                    /*
+                    // השפעת העדפות המבקר על המשקל הכולל
+                    if (userPreferences[i] == 1)
+                        currWeight -= 5; // נותן בונוס שלילי (מוריד מהמשקל) אם המבקר מעדיף את האטרקציה
+                    else
+                        currWeight += 5; // מוסיף משקל אם האטרקציה פחות מועדפת
+                    */
 
                     if (level == 1)
                         currBound -= (FirstMin(currPath[level - 1]) + FirstMin(i)) / 2;
@@ -107,6 +123,11 @@ namespace ParkRoutePlanner
                         visited[i] = true;
                         TSPRec(currBound, currWeight, level + 1, currPath, currTime);
                     }
+                    else
+                    {
+                        prunedPaths++;  // ספרנו מסלול שנחתך
+                        continue;  // דילוג על הענף הזה
+                    }
 
                     currWeight -= totalTime;
                     currBound = temp;
@@ -115,7 +136,7 @@ namespace ParkRoutePlanner
             }
         }
 
-        public static void TSP(int[,] distances, int[] durations, Dictionary<int, List<int>> futureLoads, int[] preferences, int start)
+        public static void TSP(int[,] distances, int[] durations, Dictionary<TimeOnly, List<int>> futureLoads, int[] preferences, int start)
         {
             N = distances.GetLength(0);
             adjMatrix = distances;
@@ -144,6 +165,9 @@ namespace ParkRoutePlanner
             Console.Write("Optimal Path: ");
             for (int i = 0; i <= N; i++)
                 Console.Write(finalPath[i] + " ");
+            //הדפסה
+            Console.WriteLine("\nTotal recursive calls: " + callsCounter);
+            Console.WriteLine("Total pruned paths: " + prunedPaths);
         }
     }
 }

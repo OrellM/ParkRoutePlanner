@@ -1,4 +1,4 @@
-﻿using System;
+﻿/*using System;
 using System.Collections.Generic;
 
 namespace ParkRoutePlanner
@@ -40,6 +40,55 @@ namespace ParkRoutePlanner
             int[] preferences = { 1, 0, 1, 1, 1, 0, 1, 0 };
 
             // נקודת התחלה
+            int startNode = 0;
+
+            ParkRoutePlanner.TSP(distances, durations, futureLoads, preferences, startNode);
+        }
+    }
+}*/
+using System;
+using System.Collections.Generic;
+
+namespace ParkRoutePlanner
+{
+    class Program
+    {
+        static void Main()
+        {
+            // טבלת מרחקים בין 5 המתקנים
+            int[,] distances = {
+                {  0, 10, 15, 20, 25 }, // מגלשות מים
+                { 10,  0, 12, 18, 22 }, // מכוניות מתנגשות
+                { 15, 12,  0, 10, 14 }, // ברייקדאנס
+                { 20, 18, 10,  0, 12 }, // גלגל ענק
+                { 25, 22, 14, 12,  0 }  // אנקונדה
+            };
+
+            // משך שהייה בכל מתקן (כולל זמן המתנה)
+            int[] durations = { 20, 30, 15, 20, 60 };
+
+            // תחזיות עומסים עתידיים (לפי שעה)
+            Dictionary<TimeOnly, List<int>> futureLoads = new Dictionary<TimeOnly, List<int>>
+            {
+                { new TimeOnly(10,0), new List<int> { 40, 0, 0, 0, 0 } },
+                {  new TimeOnly(11,0), new List<int> { 15, 20, 5, 10, 25 } },
+                {  new TimeOnly(12,0), new List<int> { 20, 25, 10, 15, 40 } },
+                {  new TimeOnly(13,0), new List<int> { 30, 30, 15, 20, 60 } },
+                {  new TimeOnly(14,0), new List<int> { 40, 40, 25, 30, 90 } },
+                {  new TimeOnly(15,0), new List<int> { 40, 40, 25, 30, 90 } },
+                {  new TimeOnly(16,0), new List<int> { 35, 35, 20, 25, 80 } },
+                {  new TimeOnly(17,0), new List<int> { 30, 30, 15, 20, 70 } },
+                { new TimeOnly(18, 0), new List<int> { 25, 25, 10, 15, 50 } },
+                { new TimeOnly(19, 0), new List<int> { 20, 20, 7, 12, 40 } },
+                { new TimeOnly(20, 0), new List<int> { 15, 18, 6, 10, 30 } },
+                { new TimeOnly(21, 0), new List<int> { 15, 18, 6, 10, 30 } },
+                { new TimeOnly(22, 0), new List<int> { 15, 20, 12, 18, 30 } } // עומס מתון ב-22:00
+            };
+
+            // העדפות מבקרים (1 = עדיפות גבוהה, 0 = נמוכה)
+            int[] preferences = { 1, 1, 1, 0, 1 };
+
+            // נקודת התחלה - מגלשות מים
             int startNode = 0;
 
             ParkRoutePlanner.TSP(distances, durations, futureLoads, preferences, startNode);
