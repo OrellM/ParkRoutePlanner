@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ParkRoutePlanner
+namespace ParkRoutePlanner.entity
 {
     public class Attraction
     {
@@ -12,6 +12,6 @@ namespace ParkRoutePlanner
         public string Name { get; set; }
         public int Capacity { get; set; }
         public int RideDuration { get; set; } // משך זמן המתקן
-        public int[] FutureLoad { get; set; } // אומדן עומס עתידי לפי שעה
+        //public int[] FutureLoad { get; set; } // אומדן עומס עתידי לפי שעה
     }
 }

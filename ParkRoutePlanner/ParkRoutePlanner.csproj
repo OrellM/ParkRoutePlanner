@@ -12,10 +12,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="todos\03-04.txt" />
+    <Content Include="todos\03-04.txt" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Data.SqlClient" Version="4.9.0" />
     <PackageReference Include="System.Data.SQLite" Version="1.0.119" />
   </ItemGroup>
 
