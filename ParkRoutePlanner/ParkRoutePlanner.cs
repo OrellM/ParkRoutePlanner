@@ -6,8 +6,8 @@ namespace ParkRoutePlanner
 {
     public class ParkRoutePlanner
     {
-        private static readonly TimeOnly openingTime = new TimeOnly(10, 0);
-        private static readonly TimeOnly closingTime = new TimeOnly(22, 0);
+        private static readonly TimeOnly openingTime = new TimeOnly(9, 0);
+        private static readonly TimeOnly closingTime = new TimeOnly(23, 40);
 
         private static int callsCounter = 0;  // ספירת קריאות לפונקציה
         private static int prunedPaths = 0;   // ספירת מסלולים שנחתכו
@@ -22,6 +22,7 @@ namespace ParkRoutePlanner
         private static int[] userPreferences;
         private static int startNode;
 
+        static int timeLimitInMinutes; // זמן השהות של המבקר בפארק
 
         private static int partialBestRes = int.MaxValue;
         private static int partialBestLength = 0;
@@ -125,52 +126,24 @@ namespace ParkRoutePlanner
             }
             return second;
         }
+        // משתנים חדשים לשמירה על המסלול האופטימלי החלקי
+
+        public static int[] bestPathPartial; // הכרזה בלבד, בלי new
+        public static int bestTimePartial = int.MaxValue;
 
         private static void TSPRec(int currBound, int currWeight, int level, int[] currPath, int currTime)
         {
-            // 💡 בדיקה אם אין עוד אטרקציות שאפשר להמשיך אליהן בזמן המותר
-          
-            callsCounter++;  // סופרים כל קריאה לפונקציה
+            Console.WriteLine($"[ENTER] TSPRec - level = {level}, currPath = {string.Join(" -> ", currPath.Take(level))}, currTime = {currTime}");
 
-            /*TimeOnly currentTime = TimeOnly.FromDateTime(DateTime.Now).AddMinutes(currTime);
-            if (currentTime > closingTime)
-            {
-                prunedPaths++; // ספירת חיתוכים
-                return; // אם הזמן עבר, חתוך את המסלול
-            }
-            if (currentTime > closingTime)
-            {
-                // שמירת מסלול חלקי – טוב יותר ממה שהיה
-                if (currWeight < finalRes && level > 1)
-                {
-                    Array.Copy(currPath, finalPath, level);
-                    finalPath[level] = currPath[0]; // סגירה חזרה להתחלה
-                    finalRes = currWeight;
-                    N = level; // עדכון מספר התחנות במסלול האופטימלי
-                }
-
-                prunedPaths++;
-                return;
-            }*/
-            TimeOnly currentVisitTime = TimeOnly.FromDateTime(DateTime.Now).AddMinutes(currTime);
-            if (currentVisitTime > closingTime)
-            {
-                if (level > partialBestLength || (level == partialBestLength && currWeight < partialBestRes))
-                {
-                    Array.Copy(currPath, partialBestPath, level);
-                    partialBestLength = level;
-                    partialBestRes = currWeight;
-                }
-
-                prunedPaths++;
-                return;
-            }
-
+            callsCounter++;
+            Console.WriteLine($"[DEBUG] Time Limit = {timeLimitInMinutes}");
 
             if (level == N)
             {
                 if (adjMatrix[currPath[level - 1], currPath[0]] != 0)
                 {
+                    Console.WriteLine($"Trying to close path from {currPath[level - 1]} to {currPath[0]}: {adjMatrix[currPath[level - 1], currPath[0]]}");
+
                     int currRes = currWeight + adjMatrix[currPath[level - 1], currPath[0]];
                     if (currRes < finalRes)
                     {
@@ -181,48 +154,85 @@ namespace ParkRoutePlanner
                 return;
             }
 
+            // ✨ שינוי 1: עדיפות לפי מספר מתקנים > זמן כולל
+            if ((level > partialBestLength && currTime <= timeLimitInMinutes) ||
+                (level == partialBestLength && currTime < bestTimePartial))
+            {
+                Console.WriteLine($"[PARTIAL SAVE] New best partial path! Level = {level}, currTime = {currTime}");
+                Array.Copy(currPath, bestPathPartial, level);
+                bestTimePartial = currTime;
+                partialBestLength = level;
+                partialBestRes = currWeight;
+                Console.WriteLine($"[PARTIAL SAVE] Path: {string.Join(" -> ", currPath.Take(level))}");
+            }
+
             for (int i = 0; i < N; i++)
             {
                 if (adjMatrix[currPath[level - 1], i] != 0 && !visited[i])
                 {
                     int temp = currBound;
+                    int tempTime = currTime;
+                    int tempWeight = currWeight;
+
+                    visited[i] = true;
+
                     int travelTime = adjMatrix[currPath[level - 1], i];
                     int rideTime = rideDuration[i];
                     int load = GetFutureLoad(i, currTime + travelTime);
                     int waitTime = (load / 10) * rideTime;
-                    int totalTime = travelTime + rideTime + waitTime;
 
-                     // השפעת העדפות המבקר על זמן ההמתנה
-                     if (userPreferences[i] == 1)
-                         waitTime = (int)(waitTime * 0.7); // העדפה גבוהה – מקטינים את זמן ההמתנה ב-30%
-                     else
-                         waitTime = (int)(waitTime * 1.5); // העדפה נמוכה – מגדילים את זמן ההמתנה ב-50%
-        
+                    Console.WriteLine($"[LOAD] Time: {currTime + travelTime}, Attraction: {i}, Load: {load}");
+
+                    if (load == -1)
+                    {
+                        Console.WriteLine($"[SKIP] Load missing for attraction {i} at time {currTime + travelTime}");
+                        visited[i] = false;
+                        continue;
+                    }
+
+                    waitTime = userPreferences[i] == 1 ? (int)(waitTime * 0.7) : (int)(waitTime * 1.5);
+                    int totalTime = travelTime + rideTime + waitTime;
+                    int newTime = currTime + totalTime;
+
+                    Console.WriteLine($"[TRY] i={i}, travel={travelTime}, ride={rideTime}, wait={waitTime}, total={totalTime}, newTime={newTime}");
+
+                    // ✨ שינוי 2: גם כאן עדיפות לפי מספר מתקנים
+                    if ((level + 1 > partialBestLength && newTime <= timeLimitInMinutes) ||
+                        (level + 1 == partialBestLength && newTime < bestTimePartial))
+                    {
+                        Array.Copy(currPath, bestPathPartial, level);
+                        bestPathPartial[level] = i;
+                        bestTimePartial = newTime;
+                        partialBestLength = level + 1;
+                        partialBestRes = currWeight + totalTime;
+                        Console.WriteLine($"[PARTIAL SAVE - NEW] Time = {newTime}, Path = {string.Join(" -> ", currPath.Take(level))} -> {i}");
+                    }
+
+                    if (newTime > timeLimitInMinutes)
+                    {
+                        // ✨ שינוי 3: גם כאן נעדיף יותר מתקנים
+                        if ((level > partialBestLength && currTime <= timeLimitInMinutes) ||
+                            (level == partialBestLength && currTime < bestTimePartial))
+                        {
+                            Array.Copy(currPath, bestPathPartial, level);
+                            bestTimePartial = currTime;
+                            partialBestLength = level;
+                            partialBestRes = currWeight;
+                            Console.WriteLine($"[PRE-CUT SAVE] Time = {currTime}, Level = {level}, Path = {string.Join(" -> ", currPath.Take(level))}");
+                        }
+
+                        Console.WriteLine($"[PRUNE] Time overflow: newTime = {newTime}, Limit = {timeLimitInMinutes}");
+                        prunedPaths++;
+                        visited[i] = false;
+                        continue;
+                    }
+
+                    currPath[level] = i;
+                    visited[i] = true;
+
                     currWeight += totalTime;
                     currTime += totalTime;
-                    // חיתוך מסלולים חורגים משעות הפעילות
-                    /*TimeOnly currentVisitTime = TimeOnly.FromDateTime(DateTime.Now).AddMinutes(currTime);
-                    if (currentVisitTime < openingTime || currentVisitTime > closingTime)
-                    {
-                        prunedPaths++; // ספירת חיתוכים
-                        return; // לא ממשיכים במסלול הזה
-                    }*/
-
-                  /*  // חיתוך מסלולים חורגים משעות הפעילות
-
-                    currentTime = TimeOnly.FromDateTime(DateTime.Now).AddMinutes(currTime);
-                    if (currentTime > closingTime)
-                    {
-                        prunedPaths++; // ספירת חיתוכים
-                        return; // לא ממשיכים במסלול הזה
-                    }
-                  */
-                    // השפעת העדפות המבקר על המשקל הכולל
-                    if (userPreferences[i] == 1)
-                        currWeight -= 5; // נותן בונוס שלילי (מוריד מהמשקל) אם המבקר מעדיף את האטרקציה
-                    else
-                        currWeight += 5; // מוסיף משקל אם האטרקציה פחות מועדפת
-                    
+                    currWeight += userPreferences[i] == 1 ? -5 : 5;
 
                     if (level == 1)
                         currBound -= (FirstMin(currPath[level - 1]) + FirstMin(i)) / 2;
@@ -231,33 +241,35 @@ namespace ParkRoutePlanner
 
                     if (currBound + currWeight < finalRes)
                     {
-                        currPath[level] = i;
-                        visited[i] = true;
                         TSPRec(currBound, currWeight, level + 1, currPath, currTime);
                     }
                     else
                     {
-                        prunedPaths++;  // ספרנו מסלול שנחתך
-                        continue;  // דילוג על הענף הזה
+                        Console.WriteLine($"[PRUNE] Bound = {currBound + currWeight} >= finalRes = {finalRes}");
+                        prunedPaths++;
                     }
 
-                    currWeight -= totalTime;
-                    currBound = temp;
                     visited[i] = false;
+                    currTime = tempTime;
+                    currWeight = tempWeight;
+                    currBound = temp;
                 }
             }
         }
+
+
+
+
+
+
+
         public static Result TSP(int[,] distances, int[] durations, Dictionary<TimeOnly, List<int>> futureLoads, int[] preferences, int start)
         {
             TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);
             if (now < openingTime || now >= closingTime)
             {
                 Console.WriteLine("הפארק סגור כעת. לא ניתן לחשב מסלול.");
-                return new Result
-                {
-                    Time = -1,
-                    IndexRoute = Array.Empty<int>()
-                };
+                return new Result { Time = -1, IndexRoute = Array.Empty<int>() };
             }
 
             N = distances.GetLength(0);
@@ -269,8 +281,10 @@ namespace ParkRoutePlanner
             finalPath = new int[N + 1];
             visited = new bool[N];
             int[] currPath = new int[N + 1];
-
-            partialBestPath = new int[N + 1];
+            bestPathPartial = new int[N + 1];
+            bestTimePartial = int.MaxValue;
+            partialBestRes = int.MaxValue;
+            partialBestLength = 0;
 
             int currBound = 0;
             Array.Fill(currPath, -1);
@@ -282,39 +296,53 @@ namespace ParkRoutePlanner
             currBound = (currBound % 2 == 1) ? currBound / 2 + 1 : currBound / 2;
             visited[startNode] = true;
             currPath[0] = startNode;
+            // הגדרת זמן השהות של המשתמש בפארק
+            timeLimitInMinutes = (int)(closingTime.ToTimeSpan() - now.ToTimeSpan()).TotalMinutes;
+            //timeLimitInMinutes = 240;
+            Console.WriteLine($"Time limit in minutes: {timeLimitInMinutes}");
 
             TSPRec(currBound, 0, 1, currPath, 0);
-            if (finalRes == int.MaxValue && partialBestLength > 0)
-            {
-                int[] partialRoute = new int[partialBestLength + 1];
-                Array.Copy(partialBestPath, partialRoute, partialBestLength);
-                partialRoute[partialBestLength] = partialBestPath[0]; // חזרה להתחלה
 
+           /* if (bestTimePartial != int.MaxValue)
+            {
+                Console.WriteLine("===== Optimal Route Summary =====");
+                var filteredPath = bestPathPartial
+                    .Where((value, index) => value != 0 || index == 0 || index == bestPathPartial.Length - 1)
+                    .ToList();
+
+                // הדפסת המסלול
+                Console.WriteLine("Partial Best Route: " + string.Join(" -> ", filteredPath)); Console.WriteLine("Partial Best Time: " + bestTimePartial);
+                Console.WriteLine("=================================");
+            }
+            else
+            {
+                Console.WriteLine("No optimal route found within the time limit.");
+            }*/
+
+            if (finalRes == int.MaxValue && partialBestLength > 1)
+            {
+                int[] partialResult = new int[partialBestLength + 1];
+                Array.Copy(bestPathPartial, 0, partialResult, 0, partialBestLength);
+                partialResult[partialBestLength] = bestPathPartial[0];
+
+                Console.WriteLine("לא נמצא מסלול מלא, מחזירים את המסלול החלקי הטוב ביותר.");
                 return new Result
                 {
                     Time = partialBestRes,
-                    IndexRoute = partialRoute
+                    IndexRoute = partialResult
                 };
             }
             else
-            { 
-            Result result = new Result
             {
-                Time = finalRes,
-                IndexRoute = new int[finalPath.Length]
-            };
-            //Array.Copy(finalPath, result.IndexRoute, N + 1);
-            Array.Copy(finalPath, result.IndexRoute, finalPath.Length);
-
-            return result;
+                Result result = new Result
+                {
+                    Time = bestTimePartial,
+                    IndexRoute = new int[bestPathPartial.Length]
+                };
+                Array.Copy(bestPathPartial, result.IndexRoute, bestPathPartial.Length);
+                return result;
             }
-            /* Console.WriteLine("Minimum time: " + finalRes);
-             Console.Write("Optimal Path: ");
-             for (int i = 0; i <= N; i++)
-                 Console.Write(finalPath[i] + " ");
-             //הדפסה
-             Console.WriteLine("\nTotal recursive calls: " + callsCounter);
-             Console.WriteLine("Total pruned paths: " + prunedPaths);*/
         }
     }
 }
+    

@@ -45,7 +45,9 @@ namespace ParkRoutePlanner
                 { new TimeOnly(20, 0), new List<int> { 0, 15, 18, 6, 10, 30 } },
                 { new TimeOnly(21, 0), new List<int> { 0, 15, 18, 6, 10, 30 } },
                 { new TimeOnly(22, 0), new List<int> { 0, 15, 20, 12, 18, 30 } } // עומס מתון ב-22:00
+
             };
+
 
             // העדפות מבקרים (1 = עדיפות גבוהה, 0 = נמוכה)
             int[] preferences = {0, 1, 1, 1, 0, 1 };
@@ -75,6 +77,25 @@ namespace ParkRoutePlanner
             Console.WriteLine("\nFinalRoute Object:");
             Console.WriteLine("Total Time: " + result.Time);
             Console.WriteLine("Rides Route: " + string.Join(" -> ", result.RidesRoute));
+
+            // הדפסת המסלול החלקי אם קיים
+            if (ParkRoutePlanner.bestPathPartial != null && ParkRoutePlanner.bestPathPartial.Length > 0)
+            {
+                Console.WriteLine("\n>>> Best Partial Route Found (Fallback):");
+                Console.WriteLine("Total Time: " + ParkRoutePlanner.bestTimePartial);
+
+                List<string> partialNamedRoute = new List<string>();
+                foreach (var index in ParkRoutePlanner.bestPathPartial)
+                {
+                    if (index == 0 && partialNamedRoute.Count > 0)
+                        break;
+
+                    partialNamedRoute.Add(attractionNames[index]);
+                }
+
+                Console.WriteLine("Rides Route: " + string.Join(" -> ", partialNamedRoute));
+            }
+
 
 
         }
