@@ -102,6 +102,64 @@ namespace ParkRoutePlanner
     }
 }
 
+/*using System;
+using System.Linq;
+using ParkRoutePlanner.Models;
+
+class Program
+{
+    static void Main()
+    {
+        DbInspector.ShowAttractionsAndDistances();
+
+    }
+}*/
+
+
+
+/*class Program
+{
+    static void Main(string[] args)
+    {
+        try
+        {
+            string[] names;
+            int[,] matrix;
+
+            DataLoader.LoadDistances(out names, out matrix);
+
+            Console.WriteLine("✅ טענו בהצלחה את השמות והמרחקים!");
+
+            // הדפסת שמות המתקנים
+            Console.WriteLine("\n🎢 שמות המתקנים:");
+            for (int i = 0; i < names.Length; i++)
+            {
+                Console.WriteLine($"{i}: {names[i]}");
+            }
+
+            // הדפסת חלק מהמטריצה (למשל 5 שורות ראשונות)
+            Console.WriteLine("\n📏 חלק ממטריצת המרחקים:");
+            int n = Math.Min(5, names.Length); // עד 5 שורות
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    string val = matrix[i, j] == int.MaxValue ? "∞" : matrix[i, j].ToString();
+                    Console.Write(val.PadLeft(6));
+                }
+                Console.WriteLine();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("❌ שגיאה בטעינת המידע: " + ex.Message);
+        }
+
+        Console.ReadLine(); // כדי שהחלון לא ייסגר מיד
+    }
+}*/
+
+
 
 
 /*
