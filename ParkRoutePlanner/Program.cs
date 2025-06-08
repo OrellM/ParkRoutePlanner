@@ -1,4 +1,4 @@
-﻿using ParkRoutePlanner.entity;
+﻿/*using ParkRoutePlanner.entity;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -100,7 +100,172 @@ namespace ParkRoutePlanner
 
         }
     }
-}
+}*/
+using ParkRoutePlanner;
+using ParkRoutePlanner.entity;
+using ParkRoutePlanner.Models;
+using Microsoft.AspNetCore.Http;
+using System.Collections.Generic;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// מוסיפים מדיניות CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowReactApp",
+        policy =>
+        {
+            policy.WithOrigins("http://localhost:3000")  // כתובת ה-React שלך
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        });
+});
+
+// קובעים פורט ספציפי, לדוגמה 5001
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(5001);
+});
+
+var app = builder.Build();
+
+app.UseCors("AllowReactApp");  // מפעילים את מדיניות CORS
+
+app.MapGet("/route", () =>
+{
+    string[] attractionNames = {
+        "שער כניסה",
+        "מגלשות מים",
+        "מכוניות מתנגשות",
+        "ברייקדאנס",
+        "גלגל ענק",
+        "אנקונדה"
+    };
+
+    int[,] distances = {
+        { 0, 5, 7, 8, 10, 12 },
+        { 5, 0, 10, 15, 20, 25 },
+        { 7, 10, 0, 12, 18, 22 },
+        { 8, 15, 12, 0, 10, 14 },
+        { 10, 20, 18, 10, 0, 12 },
+        { 12, 25, 22, 14, 12, 0 }
+    };
+
+    int[] durations = { 0, 20, 30, 15, 20, 60 };
+
+    var futureLoads = new Dictionary<TimeOnly, List<int>>
+    {
+        { new TimeOnly(10,0), new List<int> { 0,0, 0, 0, 0, 0 } },
+        { new TimeOnly(11,0), new List<int> { 0, 15, 20, 5, 10, 25 } },
+        { new TimeOnly(12,0), new List<int> { 0, 20, 25, 10, 15, 40 } },
+        { new TimeOnly(13,0), new List<int> { 0, 30, 30, 15, 20, 60 } },
+        { new TimeOnly(14,0), new List<int> { 0, 40, 40, 25, 30, 90 } },
+        { new TimeOnly(15,0), new List<int> { 0, 40, 40, 25, 30, 90 } },
+        { new TimeOnly(16,0), new List<int> { 0, 35, 35, 20, 25, 80 } },
+        { new TimeOnly(17,0), new List<int> { 0, 30, 30, 15, 20, 70 } },
+        { new TimeOnly(18,0), new List<int> { 0, 25, 25, 10, 15, 50 } },
+        { new TimeOnly(19,0), new List<int> { 0, 20, 20, 7, 12, 40 } },
+        { new TimeOnly(20,0), new List<int> { 0, 15, 18, 6, 10, 30 } },
+        { new TimeOnly(21,0), new List<int> { 0, 15, 18, 6, 10, 30 } },
+        { new TimeOnly(22,0), new List<int> { 0, 15, 20, 12, 18, 30 } }
+    };
+
+    int[] preferences = { 0, 1, 1, 1, 0, 1 };
+    int startNode = 0;
+
+    var res = ParkRoutePlanner.ParkRoutePlanner.TSP(distances, durations, futureLoads, preferences, startNode);
+
+    string[] namedRoute = new string[res.IndexRoute.Length];
+    for (int i = 0; i < res.IndexRoute.Length; i++)
+    {
+        namedRoute[i] = attractionNames[res.IndexRoute[i]];
+    }
+
+    FinalRoute result = new FinalRoute
+    {
+        Time = res.Time,
+        RidesRoute = namedRoute
+    };
+    Console.WriteLine("\nFinalRoute Object:");
+    Console.WriteLine("Total Time: " + result.Time);
+    Console.WriteLine("Rides Route: " + string.Join(" -> ", result.RidesRoute));
+    return Results.Json(result);
+});
+
+app.MapPost("/api/visitor", (VisitorModel visitor) =>
+{
+    Console.WriteLine($"גיל: {visitor.Age}, גובה: {visitor.Height}");
+    Console.WriteLine("קטגוריות מועדפות: " + string.Join(", ", visitor.PreferredCategories ?? new List<string>()));
+    Console.WriteLine("שעת ביקור: " + visitor.VisitStartTime + " עד " + visitor.VisitEndTime);
+    Console.WriteLine("מתקנים מועדפים: " + string.Join(", ", visitor.PreferredAttractions ?? new List<string>()));
+
+    // שכפול של הלוגיקה מ־GET
+    string[] attractionNames = {
+        "שער כניסה",
+        "מגלשות מים",
+        "מכוניות מתנגשות",
+        "ברייקדאנס",
+        "גלגל ענק",
+        "אנקונדה"
+    };
+
+    int[,] distances = {
+        { 0, 5, 7, 8, 10, 12 },
+        { 5, 0, 10, 15, 20, 25 },
+        { 7, 10, 0, 12, 18, 22 },
+        { 8, 15, 12, 0, 10, 14 },
+        { 10, 20, 18, 10, 0, 12 },
+        { 12, 25, 22, 14, 12, 0 }
+    };
+
+    int[] durations = { 0, 20, 30, 15, 20, 60 };
+
+    var futureLoads = new Dictionary<TimeOnly, List<int>>
+    {
+        { new TimeOnly(10,0), new List<int> { 0,0, 0, 0, 0, 0 } },
+        { new TimeOnly(11,0), new List<int> { 0, 15, 20, 5, 10, 25 } },
+        { new TimeOnly(12,0), new List<int> { 0, 20, 25, 10, 15, 40 } },
+        { new TimeOnly(13,0), new List<int> { 0, 30, 30, 15, 20, 60 } },
+        { new TimeOnly(14,0), new List<int> { 0, 40, 40, 25, 30, 90 } },
+        { new TimeOnly(15,0), new List<int> { 0, 40, 40, 25, 30, 90 } },
+        { new TimeOnly(16,0), new List<int> { 0, 35, 35, 20, 25, 80 } },
+        { new TimeOnly(17,0), new List<int> { 0, 30, 30, 15, 20, 70 } },
+        { new TimeOnly(18,0), new List<int> { 0, 25, 25, 10, 15, 50 } },
+        { new TimeOnly(19,0), new List<int> { 0, 20, 20, 7, 12, 40 } },
+        { new TimeOnly(20,0), new List<int> { 0, 15, 18, 6, 10, 30 } },
+        { new TimeOnly(21,0), new List<int> { 0, 15, 18, 6, 10, 30 } },
+        { new TimeOnly(22,0), new List<int> { 0, 15, 20, 12, 18, 30 } }
+    };
+
+    int[] preferences = { 0, 1, 1, 1, 0, 1 };
+    int startNode = 0;
+
+    var res = ParkRoutePlanner.ParkRoutePlanner.TSP(distances, durations, futureLoads, preferences, startNode);
+
+    string[] namedRoute = new string[res.IndexRoute.Length];
+    for (int i = 0; i < res.IndexRoute.Length; i++)
+    {
+        namedRoute[i] = attractionNames[res.IndexRoute[i]];
+    }
+
+    FinalRoute result = new FinalRoute
+    {
+        Time = res.Time,
+        RidesRoute = namedRoute
+    };
+    Console.WriteLine("\nFinalRoute Object:");
+    Console.WriteLine("Total Time: " + result.Time);
+    Console.WriteLine("Rides Route: " + string.Join(" -> ", result.RidesRoute));
+
+    return Results.Json(result);
+});
+
+
+
+app.Run();
+
+
+
 
 /*using System;
 using System.Linq;
