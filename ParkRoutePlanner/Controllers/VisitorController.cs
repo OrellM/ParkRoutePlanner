@@ -15,6 +15,9 @@ namespace ParkRoutePlanner.Controllers
             Console.WriteLine("Visit Time: " + visitor.VisitStartTime + " to " + visitor.VisitEndTime);
             Console.WriteLine("Preferred Attractions: " + string.Join(", ", visitor.PreferredAttractions));
 
+            ParkRoutePlanner.openingTime = TimeOnly.Parse(visitor.VisitStartTime);
+            ParkRoutePlanner.closingTime = TimeOnly.Parse(visitor.VisitEndTime);
+
             return Ok(new { message = "Visitor saved successfully" });
         }
     }

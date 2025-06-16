@@ -6,9 +6,15 @@ namespace ParkRoutePlanner
 {
     public class ParkRoutePlanner
     {
-        private static readonly TimeOnly openingTime = new TimeOnly(7, 0);
-        private static readonly TimeOnly closingTime = new TimeOnly(23, 40);
-
+        //public static TimeOnly openingTime;
+        //public static TimeOnly closingTime;
+        public static TimeOnly openingTime = new TimeOnly(10, 0);
+        public static TimeOnly closingTime = new TimeOnly(23, 50);
+       /* public static void SetVisitTimes(string start, string end)
+        {
+            openingTime = TimeOnly.Parse(start);
+            closingTime = TimeOnly.Parse(end);
+        }*/
         private static int callsCounter = 0;  // ספירת קריאות לפונקציה
         private static int prunedPaths = 0;   // ספירת מסלולים שנחתכו
 
@@ -16,7 +22,8 @@ namespace ParkRoutePlanner
         private static int[] finalPath;
         private static bool[] visited;
         private static int finalRes = int.MaxValue;
-        private static Dictionary<TimeOnly, List<int>> futureLoad;
+        //private static Dictionary<TimeOnly, List<int>> futureLoad;
+        private static Dictionary<string, Dictionary<string, double>> futureLoad;
         private static int[,] adjMatrix;
         private static int[] rideDuration;
         private static int[] userPreferences;
@@ -71,29 +78,101 @@ namespace ParkRoutePlanner
 
              return 0;
           }*/
+        //הפונקציה הקודמת שעבדה
+        /* private static int GetFutureLoad(int attraction, int time)
+         {
+             TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);
+             TimeOnly targetTime = now.AddMinutes(time);
+
+             // ננרמל את השעה כלפי מעלה לשעה עגולה (לדוגמה: 10:33 → 11:00)
+             if (targetTime.Minute > 0 || targetTime.Second > 0)
+             {
+                 int newHour = targetTime.Hour + 1;
+                 if (newHour >= 24) newHour = 23; // לא לעבור על השעה האחרונה בטווח
+                 targetTime = new TimeOnly(newHour, 0);
+             }
+
+             if (futureLoad.ContainsKey(targetTime))
+             {
+                 var loads = futureLoad[targetTime];
+                 Console.WriteLine($"[Load Check] Time: {targetTime}, Attraction: {attraction}, Load: {loads[attraction]}");
+                 return loads[attraction];
+             }
+
+             Console.WriteLine($"[Load Check] Time: {targetTime}, Attraction: {attraction}, Load: 0 (Not found)");
+             return 0;
+         }*/
+/*זאת הפונקציה של השליפה מהקובץ
+        private static int GetFutureLoad(int attraction, int time)
+        {
+            TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);
+            TimeOnly targetTime = now.AddMinutes(time);
+
+            // נרמל כלפי מעלה לשעה עגולה
+            if (targetTime.Minute > 0 || targetTime.Second > 0)
+            {
+                int newHour = targetTime.Hour + 1;
+                if (newHour >= 24) newHour = 23;
+                targetTime = new TimeOnly(newHour, 0);
+            }
+
+            string timeKey = targetTime.ToString("HH:mm");
+            string attractionId = attraction.ToString();
+
+            // טען את קובץ העומסים אם צריך
+            LoadManager.LoadDailyLoads();
+
+            // ניגש לנתונים
+            if (LoadManager.loadsData != null &&
+                LoadManager.loadsData.ContainsKey(timeKey) &&
+                LoadManager.loadsData[timeKey].ContainsKey(attractionId))
+            {
+                var load = LoadManager.loadsData[timeKey][attractionId];
+                Console.WriteLine($"[Load Check] Time: {timeKey}, Attraction: {attractionId}, Load: {load}");
+                return (int)load;
+            }
+
+            Console.WriteLine($"[Load Check] Time: {timeKey}, Attraction: {attractionId}, Load: 0 (Not found)");
+            return 0;
+        }*/
 
         private static int GetFutureLoad(int attraction, int time)
         {
             TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);
             TimeOnly targetTime = now.AddMinutes(time);
 
-            // ננרמל את השעה כלפי מעלה לשעה עגולה (לדוגמה: 10:33 → 11:00)
+            // נרמל כלפי מעלה לשעה עגולה
             if (targetTime.Minute > 0 || targetTime.Second > 0)
             {
                 int newHour = targetTime.Hour + 1;
-                if (newHour >= 24) newHour = 23; // לא לעבור על השעה האחרונה בטווח
+                if (newHour >= 24) newHour = 23;
                 targetTime = new TimeOnly(newHour, 0);
             }
 
-            if (futureLoad.ContainsKey(targetTime))
+            string timeKey = targetTime.ToString("HH:mm");
+            string attractionId = attraction.ToString();
+
+            // ניגש לנתונים מתוך המילון שנשלח לפונקציה
+            if (futureLoad != null &&
+                futureLoad.ContainsKey(timeKey) &&
+                futureLoad[timeKey].ContainsKey(attractionId))
             {
-                var loads = futureLoad[targetTime];
-                Console.WriteLine($"[Load Check] Time: {targetTime}, Attraction: {attraction}, Load: {loads[attraction]}");
-                return loads[attraction];
+                var load = futureLoad[timeKey][attractionId];
+              //  Console.WriteLine($"[Load Check] Time: {timeKey}, Attraction: {attractionId}, Load: {load}");
+                return (int)load;
             }
 
-            Console.WriteLine($"[Load Check] Time: {targetTime}, Attraction: {attraction}, Load: 0 (Not found)");
+            //Console.WriteLine($"[Load Check] Time: {timeKey}, Attraction: {attractionId}, Load: 0 (Not found)");
             return 0;
+        }
+        private static bool ContainsAttraction(int[] path, int length, int attraction)
+        {
+            for (int i = 0; i < length; i++)
+            {
+                if (path[i] == attraction)
+                    return true;
+            }
+            return false;
         }
 
 
@@ -130,13 +209,15 @@ namespace ParkRoutePlanner
 
         public static int[] bestPathPartial; // הכרזה בלבד, בלי new
         public static int bestTimePartial = int.MaxValue; //זמן השהייה במסלול החלקי
+        public static int[] attractionVisitorsCount;
+        public static int capacityPenaltyPoints = 20;
 
-        private static void TSPRec(int currBound, int currWeight, int level, int[] currPath, int currTime)
+        private static void TSPRec(int currBound, int currWeight, int level, int[] currPath, int currTime, bool[] isExcluded)
         {
-            Console.WriteLine($"[ENTER] TSPRec - level = {level}, currPath = {string.Join(" -> ", currPath.Take(level))}, currTime = {currTime}");
+            //Console.WriteLine($"[ENTER] TSPRec - level = {level}, currPath = {string.Join(" -> ", currPath.Take(level))}, currTime = {currTime}");
 
             callsCounter++;// מונה קריאות הפונקציה הרקורסיבית
-            Console.WriteLine($"[DEBUG] Time Limit = {timeLimitInMinutes}");
+            //Console.WriteLine($"[DEBUG] Time Limit = {timeLimitInMinutes}");
 
             if (level == N)// אם הגענו לכל הקודקודים 
             {
@@ -144,7 +225,7 @@ namespace ParkRoutePlanner
 
                 if (adjMatrix[currPath[level - 1], currPath[0]] != 0)
                 {
-                    Console.WriteLine($"Trying to close path from {currPath[level - 1]} to {currPath[0]}: {adjMatrix[currPath[level - 1], currPath[0]]}");
+                    //Console.WriteLine($"Trying to close path from {currPath[level - 1]} to {currPath[0]}: {adjMatrix[currPath[level - 1], currPath[0]]}");
 
                     int currRes = currWeight + adjMatrix[currPath[level - 1], currPath[0]];// חישוב המשקל הכולל של המסלול הסגור
                     if (currRes < finalRes)  // אם המשקל החדש קטן מהטוב ביותר שנמצא
@@ -152,42 +233,52 @@ namespace ParkRoutePlanner
                         CopyToFinal(currPath); // מעתיקים את הנתיב למשתנה המסלול הטוב ביותר
                         finalRes = currRes; // מעדכנים את המשקל הטוב ביותר
                     }
+                    
+
                 }
                 return; // יוצאים מהקריאה הרקורסיבית כי סיימנו מסלול מלא
             }
 
-            if ((level > partialBestLength && currTime <= timeLimitInMinutes) ||
+            if (currPath[0] == 0 && (level > partialBestLength && currTime <= timeLimitInMinutes) ||
                 (level == partialBestLength && currTime < bestTimePartial))
             // שמירת המסלול החלקי הטוב ביותר לפי מספר מתקנים ומשך זמן כולל
             {
-                Console.WriteLine($"[PARTIAL SAVE] New best partial path! Level = {level}, currTime = {currTime}");
+
+                //Console.WriteLine($"[PARTIAL SAVE] New best partial path! Level = {level}, currTime = {currTime}");
                 Array.Copy(currPath, bestPathPartial, level);
+                bestPathPartial[0] = startNode; // 👈 מוסיפים את זה כאן
                 bestTimePartial = currTime;
                 partialBestLength = level;
                 partialBestRes = currWeight;
-                Console.WriteLine($"[PARTIAL SAVE] Path: {string.Join(" -> ", currPath.Take(level))}");
+                //Console.WriteLine($"[PARTIAL SAVE] Path: {string.Join(" -> ", currPath.Take(level))}");
             }
 
             for (int i = 0; i < N; i++) // עבור כל אטרקציה אפשרית
             {
+                if (isExcluded[i])
+                {
+                    Console.WriteLine($"🚫 דילגנו על מתקן מוחרג: אינדקס {i}");
+                    continue;
+                }
+
                 if (adjMatrix[currPath[level - 1], i] != 0 && !visited[i])
                 {
                     int temp = currBound;
                     int tempTime = currTime; // שומרים זמנית את הזמן הנוכחי
                     int tempWeight = currWeight; // שומרים זמנית את המשקל הנוכחי
 
-                    visited[i] = true;// סומן שבוקר גבר
+                    visited[i] = true;// סומן שבוקר כבר
 
                     int travelTime = adjMatrix[currPath[level - 1], i]; //זמן הנסיעה מהאטרקציה הנוכחית
                     int rideTime = rideDuration[i]; //משך זמן שהייה באטרקציה
                     int load = GetFutureLoad(i, currTime + travelTime); // המתנה משוערת בעת ההגעה
                     int waitTime = (load / 10) * rideTime; //חישוב זמן ההמתנה
 
-                    Console.WriteLine($"[LOAD] Time: {currTime + travelTime}, Attraction: {i}, Load: {load}");
+                    //Console.WriteLine($"[LOAD] Time: {currTime + travelTime}, Attraction: {i}, Load: {load}");
 
                     if (load == -1) // אם אין נתוני עומס לאטרקציה בזמן זה
                     {
-                        Console.WriteLine($"[SKIP] Load missing for attraction {i} at time {currTime + travelTime}");
+                        //Console.WriteLine($"[SKIP] Load missing for attraction {i} at time {currTime + travelTime}");
                         visited[i] = false; // משחררים את האטרקציה לסיבוב הבא
                         continue; // עוברים לאטרקציה הבאה בלולאה
                     }
@@ -196,18 +287,21 @@ namespace ParkRoutePlanner
                     int totalTime = travelTime + rideTime + waitTime; //סה"כ זמן להוספה למסלול
                     int newTime = currTime + totalTime; //זמן מצטבר לאחר הוספת אטרקציה זו
 
-                    Console.WriteLine($"[TRY] i={i}, travel={travelTime}, ride={rideTime}, wait={waitTime}, total={totalTime}, newTime={newTime}");
+                    //Console.WriteLine($"[TRY] i={i}, travel={travelTime}, ride={rideTime}, wait={waitTime}, total={totalTime}, newTime={newTime}");
 
                     // שמירת המסלול החלקי הטוב ביותר לפי מספר מתקנים ומשך זמן
-                    if ((level + 1 > partialBestLength && newTime <= timeLimitInMinutes) ||
+                    if (!ContainsAttraction(currPath, level, i) && (level + 1 > partialBestLength && newTime <= timeLimitInMinutes) ||
                         (level + 1 == partialBestLength && newTime < bestTimePartial))
                     {
                         Array.Copy(currPath, bestPathPartial, level); // מעתיקים את הנתיב עד לפני הוספת האטרקציה החדשה
+
+                        bestPathPartial[0] = startNode;  // תמיד מגדירים את המקום הראשון!
+
                         bestPathPartial[level] = i; // מוסיפים את האטרקציה החדשה למסלול החלקי
                         bestTimePartial = newTime; // מעדכנים את זמן המסלול החלקי 
                         partialBestLength = level + 1; // מעדכנים את האורך החלקי
                         partialBestRes = currWeight + totalTime; // מעדכנים את המשקל של המסלול החלקי
-                        Console.WriteLine($"[PARTIAL SAVE - NEW] Time = {newTime}, Path = {string.Join(" -> ", currPath.Take(level))} -> {i}");
+                        //Console.WriteLine($"[PARTIAL SAVE - NEW] Time = {newTime}, Path = {string.Join(" -> ", currPath.Take(level))} -> {i}");
                     }
 
                     if (newTime > timeLimitInMinutes) // אם זמן המסלול עבר את המגבלה
@@ -217,13 +311,14 @@ namespace ParkRoutePlanner
                             (level == partialBestLength && currTime < bestTimePartial))
                         {
                             Array.Copy(currPath, bestPathPartial, level);
+                            bestPathPartial[0] = startNode;  // 👈 חייב להיות כאן!
                             bestTimePartial = currTime;
                             partialBestLength = level;
                             partialBestRes = currWeight;
-                            Console.WriteLine($"[PRE-CUT SAVE] Time = {currTime}, Level = {level}, Path = {string.Join(" -> ", currPath.Take(level))}");
+                            //Console.WriteLine($"[PRE-CUT SAVE] Time = {currTime}, Level = {level}, Path = {string.Join(" -> ", currPath.Take(level))}");
                         }
 
-                        Console.WriteLine($"[PRUNE] Time overflow: newTime = {newTime}, Limit = {timeLimitInMinutes}");
+                        //Console.WriteLine($"[PRUNE] Time overflow: newTime = {newTime}, Limit = {timeLimitInMinutes}");
                         prunedPaths++; // מגדילים מונה חיתוכים
                         visited[i] = false; // משחררים את האטרקציה לבחירה אחרת
                         continue; // מדלגים על ענף זה
@@ -236,7 +331,8 @@ namespace ParkRoutePlanner
                     currWeight += totalTime;
                     currTime += totalTime;
                     // התאמת המשקל לפי העדפות המשתמש (עדיפות מתקנים מועדפים)
-                    currWeight += userPreferences[i] == 1 ? -5 : 5;
+                    //currWeight += userPreferences[i] == 1 ? -5 : 5;
+                    currWeight += userPreferences[i] == 1 ? -1 * rideDuration[i] : rideDuration[i];
 
                     // חישוב Bound חדש לפי הנקודה ברמה הנוכחית
                     if (level == 1)
@@ -246,11 +342,11 @@ namespace ParkRoutePlanner
 
                     if (currBound + currWeight < finalRes) // בדיקת גבול כדי להחליט אם להמשיך עם הענף
                     {
-                        TSPRec(currBound, currWeight, level + 1, currPath, currTime); // קריאה רקורסיבית לרמה הבאה
+                        TSPRec(currBound, currWeight, level + 1, currPath, currTime, isExcluded ); // קריאה רקורסיבית לרמה הבאה
                     }
                     else
                     {
-                        Console.WriteLine($"[PRUNE] Bound = {currBound + currWeight} >= finalRes = {finalRes}");
+                        //Console.WriteLine($"[PRUNE] Bound = {currBound + currWeight} >= finalRes = {finalRes}");
                         prunedPaths++; // מניית החיתוכים
                     }
 
@@ -263,14 +359,11 @@ namespace ParkRoutePlanner
         }
 
 
-
-
-
-
-
-        public static Result TSP(int[,] distances, int[] durations, Dictionary<TimeOnly, List<int>> futureLoads, int[] preferences, int start)
+        public static Result TSP(int[,] distances, int[] durations, Dictionary<string, Dictionary<string, double>> futureLoads, int[] preferences, int start, bool[] isExcluded)
         {
+            DateTime startTime = DateTime.Now;
             TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);  // הזמן הנוכחי
+
             if (now < openingTime || now >= closingTime) // בדיקת שעות פתיחה
             {
                 Console.WriteLine("הפארק סגור כעת. לא ניתן לחשב מסלול.");
@@ -290,7 +383,7 @@ namespace ParkRoutePlanner
             bestTimePartial = int.MaxValue; // הזמן הטוב ביותר למסלול חלקי
             partialBestRes = int.MaxValue; // המשקל הטוב ביותר למסלול חלקי
             partialBestLength = 0; // האורך של המסלול החלקי הטוב ביותר
-
+            attractionVisitorsCount = new int[N];
             int currBound = 0; // החישוב הראשוני של Bound (הערכת עליונה למינימום מסלול)
             Array.Fill(currPath, -1); // אתחול המסלול הנוכחי לערכים ריקים
             Array.Fill(visited, false); // אתחול מערך הביקורות
@@ -302,11 +395,12 @@ namespace ParkRoutePlanner
             currBound = (currBound % 2 == 1) ? currBound / 2 + 1 : currBound / 2; // תיקון עבור זוגיות
             visited[startNode] = true;
             currPath[0] = startNode; // הגדרת נקודת ההתחלה במסלול
+            bestPathPartial[0] = startNode;
             // הגדרת זמן השהות של המשתמש בפארק
             timeLimitInMinutes = (int)(closingTime.ToTimeSpan() - now.ToTimeSpan()).TotalMinutes;
             Console.WriteLine($"Time limit in minutes: {timeLimitInMinutes}");
-
-            TSPRec(currBound, 0, 1, currPath, 0); // קריאה ראשונית לפונקציה הרקורסיבית
+            
+            TSPRec(currBound, 0, 1, currPath, 0, isExcluded); // קריאה ראשונית לפונקציה הרקורסיבית
 
            // במידה ולא נמצא מסלול מלא, מחזירים את המסלול החלקי הטוב ביותר
             if (finalRes == int.MaxValue && partialBestLength > 1)
@@ -330,6 +424,10 @@ namespace ParkRoutePlanner
                     IndexRoute = new int[bestPathPartial.Length]
                 };
                 Array.Copy(bestPathPartial, result.IndexRoute, bestPathPartial.Length);
+                DateTime endTime = DateTime.Now;
+                Console.WriteLine($"התחלתי את החישוב ב: {startTime:HH:mm:ss.fff}");
+                Console.WriteLine($"סיימתי את החישוב ב: {endTime:HH:mm:ss.fff}");
+                Console.WriteLine($"משך זמן הרצה: {(endTime - startTime).TotalMilliseconds} מילישניות");
                 return result;
             }
         }
