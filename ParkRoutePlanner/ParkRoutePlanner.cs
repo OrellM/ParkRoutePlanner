@@ -9,7 +9,7 @@ namespace ParkRoutePlanner
         //public static TimeOnly openingTime;
         //public static TimeOnly closingTime;
         public static TimeOnly openingTime = new TimeOnly(10, 0);
-        public static TimeOnly closingTime = new TimeOnly(23, 50);
+        public static TimeOnly closingTime = new TimeOnly(23, 0);
        /* public static void SetVisitTimes(string start, string end)
         {
             openingTime = TimeOnly.Parse(start);
@@ -34,50 +34,16 @@ namespace ParkRoutePlanner
         private static int partialBestRes = int.MaxValue;
         private static int partialBestLength = 0;
         private static int[] partialBestPath;
+        public static Dictionary<int, int> attractionArrivalTimes = new();
+        private static string[] attractionNames;
         private static void CopyToFinal(int[] currPath)
         {
             Array.Copy(currPath, finalPath, N);
             finalPath[N] = currPath[0];
         }
-        //time= מספר הדקות שהמשתמש הולך להיות במתקנים קודמים לאטרקציה + מספר הדקות שלוקח לו להגיע עד לאטרקציה החדשה
-        /* private static int GetFutureLoad(int attraction, int time)
-         {
-             TimeOnly hour = TimeOnly.FromDateTime(DateTime.Now).AddMinutes(time);
-             if (futureLoad.ContainsKey(hour))
-             {
-                 var loads = futureLoad[hour];
 
-                 return loads[attraction-1];
-             }
 
-             return 0; // במקרה שאין נתונים, מחזירים 0
-         }*/
 
-        //זה הקודם שלי
-        /* private static int GetFutureLoad(int attraction, int time)
-          {
-              TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);
-              TimeOnly targetTime = now.AddMinutes(time);
-
-              // ננרמל את השעה כלפי מעלה לשעה עגולה (לדוגמה: 10:33 → 11:00)
-              if (targetTime.Minute > 0 || targetTime.Second > 0)
-              {
-                  int newHour = targetTime.Hour + 1;
-                  if (newHour >= 24) newHour = 23; // לא לעבור על השעה האחרונה בטווח
-                  targetTime = new TimeOnly(newHour, 0);
-              }
-
-              if (futureLoad.ContainsKey(targetTime))
-              {
-                  var loads = futureLoad[targetTime];
-                 Console.WriteLine($"[Load Check] Time: {targetTime}, Attraction: {attraction}, Load: {loads[attraction]}");
-
-                 return loads[attraction];
-              }
-             Console.WriteLine($"[Load Check] Time: {targetTime}, Attraction: {attraction}, Load: 0 (Not found)");
-
-             return 0;
-          }*/
         //הפונקציה הקודמת שעבדה
         /* private static int GetFutureLoad(int attraction, int time)
          {
@@ -102,13 +68,73 @@ namespace ParkRoutePlanner
              Console.WriteLine($"[Load Check] Time: {targetTime}, Attraction: {attraction}, Load: 0 (Not found)");
              return 0;
          }*/
-/*זאת הפונקציה של השליפה מהקובץ
-        private static int GetFutureLoad(int attraction, int time)
+        /*זאת הפונקציה של השליפה מהקובץ
+                private static int GetFutureLoad(int attraction, int time)
+                {
+                    TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);
+                    TimeOnly targetTime = now.AddMinutes(time);
+
+                    // נרמל כלפי מעלה לשעה עגולה
+                    if (targetTime.Minute > 0 || targetTime.Second > 0)
+                    {
+                        int newHour = targetTime.Hour + 1;
+                        if (newHour >= 24) newHour = 23;
+                        targetTime = new TimeOnly(newHour, 0);
+                    }
+
+                    string timeKey = targetTime.ToString("HH:mm");
+                    string attractionId = attraction.ToString();
+
+                    // טען את קובץ העומסים אם צריך
+                    LoadManager.LoadDailyLoads();
+
+                    // ניגש לנתונים
+                    if (LoadManager.loadsData != null &&
+                        LoadManager.loadsData.ContainsKey(timeKey) &&
+                        LoadManager.loadsData[timeKey].ContainsKey(attractionId))
+                    {
+                        var load = LoadManager.loadsData[timeKey][attractionId];
+                        Console.WriteLine($"[Load Check] Time: {timeKey}, Attraction: {attractionId}, Load: {load}");
+                        return (int)load;
+                    }
+
+                    Console.WriteLine($"[Load Check] Time: {timeKey}, Attraction: {attractionId}, Load: 0 (Not found)");
+                    return 0;
+                }*/
+        /* private static int GetFutureLoad(int attraction, int time)
+         {
+             TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);
+             TimeOnly targetTime = now.AddMinutes(time);
+
+             // נרמל כלפי מעלה לשעה עגולה
+             if (targetTime.Minute > 0 || targetTime.Second > 0)
+             {
+                 int newHour = targetTime.Hour + 1;
+                 if (newHour >= 24) newHour = 23;
+                 targetTime = new TimeOnly(newHour, 0);
+             }
+
+             string timeKey = targetTime.ToString("HH:mm");
+             string attractionId = attraction.ToString();
+
+             // ניגש לנתונים מתוך המילון שנשלח לפונקציה
+             if (futureLoad != null &&
+                 futureLoad.ContainsKey(timeKey) &&
+                 futureLoad[timeKey].ContainsKey(attractionId))
+             {
+                 var load = futureLoad[timeKey][attractionId];
+                 Console.WriteLine($"[Load Check] Time: {timeKey}, Attraction: {attractionId}, Load: {load}");
+                 return (int)load;
+             }
+
+             Console.WriteLine($"[Load Check] Time: {timeKey}, Attraction: {attractionId}, Load: 0 (Not found)");
+             return 0;
+         }*/
+        private static int GetFutureLoad(int attractionIndex, int time)
         {
             TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);
             TimeOnly targetTime = now.AddMinutes(time);
 
-            // נרמל כלפי מעלה לשעה עגולה
             if (targetTime.Minute > 0 || targetTime.Second > 0)
             {
                 int newHour = targetTime.Hour + 1;
@@ -116,55 +142,24 @@ namespace ParkRoutePlanner
                 targetTime = new TimeOnly(newHour, 0);
             }
 
-            string timeKey = targetTime.ToString("HH:mm");
-            string attractionId = attraction.ToString();
+            string hourKey = targetTime.Hour.ToString();
+            string attractionName = attractionNames[attractionIndex];  // שימוש ב-attractionNames שהוגדרו גלובלית
 
-            // טען את קובץ העומסים אם צריך
-            LoadManager.LoadDailyLoads();
-
-            // ניגש לנתונים
-            if (LoadManager.loadsData != null &&
-                LoadManager.loadsData.ContainsKey(timeKey) &&
-                LoadManager.loadsData[timeKey].ContainsKey(attractionId))
-            {
-                var load = LoadManager.loadsData[timeKey][attractionId];
-                Console.WriteLine($"[Load Check] Time: {timeKey}, Attraction: {attractionId}, Load: {load}");
-                return (int)load;
-            }
-
-            Console.WriteLine($"[Load Check] Time: {timeKey}, Attraction: {attractionId}, Load: 0 (Not found)");
-            return 0;
-        }*/
-
-        private static int GetFutureLoad(int attraction, int time)
-        {
-            TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);
-            TimeOnly targetTime = now.AddMinutes(time);
-
-            // נרמל כלפי מעלה לשעה עגולה
-            if (targetTime.Minute > 0 || targetTime.Second > 0)
-            {
-                int newHour = targetTime.Hour + 1;
-                if (newHour >= 24) newHour = 23;
-                targetTime = new TimeOnly(newHour, 0);
-            }
-
-            string timeKey = targetTime.ToString("HH:mm");
-            string attractionId = attraction.ToString();
-
-            // ניגש לנתונים מתוך המילון שנשלח לפונקציה
             if (futureLoad != null &&
-                futureLoad.ContainsKey(timeKey) &&
-                futureLoad[timeKey].ContainsKey(attractionId))
+                futureLoad.ContainsKey(attractionName) &&
+                futureLoad[attractionName].ContainsKey(hourKey))
             {
-                var load = futureLoad[timeKey][attractionId];
-              //  Console.WriteLine($"[Load Check] Time: {timeKey}, Attraction: {attractionId}, Load: {load}");
+                var load = futureLoad[attractionName][hourKey];
+                Console.WriteLine($"[Load Check] Time: {hourKey}, Attraction: {attractionName}, Load: {load}");
                 return (int)load;
             }
 
-            //Console.WriteLine($"[Load Check] Time: {timeKey}, Attraction: {attractionId}, Load: 0 (Not found)");
+            Console.WriteLine($"[Load Check] Time: {hourKey}, Attraction: {attractionName}, Load: 0 (Not found)");
             return 0;
         }
+
+
+
         private static bool ContainsAttraction(int[] path, int length, int attraction)
         {
             for (int i = 0; i < length; i++)
@@ -212,12 +207,12 @@ namespace ParkRoutePlanner
         public static int[] attractionVisitorsCount;
         public static int capacityPenaltyPoints = 20;
 
-        private static void TSPRec(int currBound, int currWeight, int level, int[] currPath, int currTime, bool[] isExcluded)
+        private static void TSPRec(int currBound, int currWeight, int level, int[] currPath, int currTime, bool[] isExcluded, Dictionary<int, int> arrivalTimes)
         {
-            //Console.WriteLine($"[ENTER] TSPRec - level = {level}, currPath = {string.Join(" -> ", currPath.Take(level))}, currTime = {currTime}");
+            Console.WriteLine($"[ENTER] TSPRec - level = {level}, currPath = {string.Join(" -> ", currPath.Take(level))}, currTime = {currTime}");
 
             callsCounter++;// מונה קריאות הפונקציה הרקורסיבית
-            //Console.WriteLine($"[DEBUG] Time Limit = {timeLimitInMinutes}");
+            Console.WriteLine($"[DEBUG] Time Limit = {timeLimitInMinutes}");
 
             if (level == N)// אם הגענו לכל הקודקודים 
             {
@@ -225,7 +220,7 @@ namespace ParkRoutePlanner
 
                 if (adjMatrix[currPath[level - 1], currPath[0]] != 0)
                 {
-                    //Console.WriteLine($"Trying to close path from {currPath[level - 1]} to {currPath[0]}: {adjMatrix[currPath[level - 1], currPath[0]]}");
+                    Console.WriteLine($"Trying to close path from {currPath[level - 1]} to {currPath[0]}: {adjMatrix[currPath[level - 1], currPath[0]]}");
 
                     int currRes = currWeight + adjMatrix[currPath[level - 1], currPath[0]];// חישוב המשקל הכולל של המסלול הסגור
                     if (currRes < finalRes)  // אם המשקל החדש קטן מהטוב ביותר שנמצא
@@ -246,11 +241,14 @@ namespace ParkRoutePlanner
 
                 //Console.WriteLine($"[PARTIAL SAVE] New best partial path! Level = {level}, currTime = {currTime}");
                 Array.Copy(currPath, bestPathPartial, level);
+                attractionArrivalTimes = new Dictionary<int, int>(arrivalTimes);
+
                 bestPathPartial[0] = startNode; // 👈 מוסיפים את זה כאן
                 bestTimePartial = currTime;
                 partialBestLength = level;
                 partialBestRes = currWeight;
-                //Console.WriteLine($"[PARTIAL SAVE] Path: {string.Join(" -> ", currPath.Take(level))}");
+
+                Console.WriteLine($"[PARTIAL SAVE] Path: {string.Join(" -> ", currPath.Take(level))}");
             }
 
             for (int i = 0; i < N; i++) // עבור כל אטרקציה אפשרית
@@ -263,22 +261,25 @@ namespace ParkRoutePlanner
 
                 if (adjMatrix[currPath[level - 1], i] != 0 && !visited[i])
                 {
+
                     int temp = currBound;
                     int tempTime = currTime; // שומרים זמנית את הזמן הנוכחי
                     int tempWeight = currWeight; // שומרים זמנית את המשקל הנוכחי
-
                     visited[i] = true;// סומן שבוקר כבר
-
                     int travelTime = adjMatrix[currPath[level - 1], i]; //זמן הנסיעה מהאטרקציה הנוכחית
+
+                    int arrivalTime = currWeight + travelTime;
+                    arrivalTimes[i] = arrivalTime;
+
                     int rideTime = rideDuration[i]; //משך זמן שהייה באטרקציה
                     int load = GetFutureLoad(i, currTime + travelTime); // המתנה משוערת בעת ההגעה
                     int waitTime = (load / 10) * rideTime; //חישוב זמן ההמתנה
 
-                    //Console.WriteLine($"[LOAD] Time: {currTime + travelTime}, Attraction: {i}, Load: {load}");
+                    Console.WriteLine($"[LOAD] Time: {currTime + travelTime}, Attraction: {i}, Load: {load}");
 
                     if (load == -1) // אם אין נתוני עומס לאטרקציה בזמן זה
                     {
-                        //Console.WriteLine($"[SKIP] Load missing for attraction {i} at time {currTime + travelTime}");
+                        Console.WriteLine($"[SKIP] Load missing for attraction {i} at time {currTime + travelTime}");
                         visited[i] = false; // משחררים את האטרקציה לסיבוב הבא
                         continue; // עוברים לאטרקציה הבאה בלולאה
                     }
@@ -287,20 +288,21 @@ namespace ParkRoutePlanner
                     int totalTime = travelTime + rideTime + waitTime; //סה"כ זמן להוספה למסלול
                     int newTime = currTime + totalTime; //זמן מצטבר לאחר הוספת אטרקציה זו
 
-                    //Console.WriteLine($"[TRY] i={i}, travel={travelTime}, ride={rideTime}, wait={waitTime}, total={totalTime}, newTime={newTime}");
+                    Console.WriteLine($"[TRY] i={i}, travel={travelTime}, ride={rideTime}, wait={waitTime}, total={totalTime}, newTime={newTime}");
 
                     // שמירת המסלול החלקי הטוב ביותר לפי מספר מתקנים ומשך זמן
                     if (!ContainsAttraction(currPath, level, i) && (level + 1 > partialBestLength && newTime <= timeLimitInMinutes) ||
                         (level + 1 == partialBestLength && newTime < bestTimePartial))
                     {
                         Array.Copy(currPath, bestPathPartial, level); // מעתיקים את הנתיב עד לפני הוספת האטרקציה החדשה
-
+                        attractionArrivalTimes = new Dictionary<int, int>(arrivalTimes);
                         bestPathPartial[0] = startNode;  // תמיד מגדירים את המקום הראשון!
 
                         bestPathPartial[level] = i; // מוסיפים את האטרקציה החדשה למסלול החלקי
                         bestTimePartial = newTime; // מעדכנים את זמן המסלול החלקי 
                         partialBestLength = level + 1; // מעדכנים את האורך החלקי
                         partialBestRes = currWeight + totalTime; // מעדכנים את המשקל של המסלול החלקי
+
                         //Console.WriteLine($"[PARTIAL SAVE - NEW] Time = {newTime}, Path = {string.Join(" -> ", currPath.Take(level))} -> {i}");
                     }
 
@@ -315,6 +317,8 @@ namespace ParkRoutePlanner
                             bestTimePartial = currTime;
                             partialBestLength = level;
                             partialBestRes = currWeight;
+                            attractionArrivalTimes = new Dictionary<int, int>(arrivalTimes);
+
                             //Console.WriteLine($"[PRE-CUT SAVE] Time = {currTime}, Level = {level}, Path = {string.Join(" -> ", currPath.Take(level))}");
                         }
 
@@ -342,11 +346,11 @@ namespace ParkRoutePlanner
 
                     if (currBound + currWeight < finalRes) // בדיקת גבול כדי להחליט אם להמשיך עם הענף
                     {
-                        TSPRec(currBound, currWeight, level + 1, currPath, currTime, isExcluded ); // קריאה רקורסיבית לרמה הבאה
+                        TSPRec(currBound, currWeight, level + 1, currPath, currTime, isExcluded, new Dictionary<int, int>(arrivalTimes)); // קריאה רקורסיבית לרמה הבאה
                     }
                     else
                     {
-                        //Console.WriteLine($"[PRUNE] Bound = {currBound + currWeight} >= finalRes = {finalRes}");
+                        Console.WriteLine($"[PRUNE] Bound = {currBound + currWeight} >= finalRes = {finalRes}");
                         prunedPaths++; // מניית החיתוכים
                     }
 
@@ -359,7 +363,7 @@ namespace ParkRoutePlanner
         }
 
 
-        public static Result TSP(int[,] distances, int[] durations, Dictionary<string, Dictionary<string, double>> futureLoads, int[] preferences, int start, bool[] isExcluded)
+        public static Result TSP(int[,] distances, int[] durations, Dictionary<string, Dictionary<string, double>> futureLoads, int[] preferences, int start, bool[] isExcluded, string[] attractionNames)
         {
             DateTime startTime = DateTime.Now;
             TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);  // הזמן הנוכחי
@@ -375,6 +379,8 @@ namespace ParkRoutePlanner
             rideDuration = durations; // זמני רכיבה בכל אטרקציה
             futureLoad = futureLoads; // עומסים עתידיים לכל אטרקציה וזמן
             userPreferences = preferences; // העדפות המשתמש
+            ParkRoutePlanner.attractionNames = attractionNames;//
+
             startNode = start; // נקודת התחלה במסלול
             finalPath = new int[N + 1]; // מערך שמכיל את המסלול המלא הטוב ביותר
             visited = new bool[N]; // מערך לבקרות באטרקציות
@@ -396,11 +402,12 @@ namespace ParkRoutePlanner
             visited[startNode] = true;
             currPath[0] = startNode; // הגדרת נקודת ההתחלה במסלול
             bestPathPartial[0] = startNode;
+
             // הגדרת זמן השהות של המשתמש בפארק
             timeLimitInMinutes = (int)(closingTime.ToTimeSpan() - now.ToTimeSpan()).TotalMinutes;
             Console.WriteLine($"Time limit in minutes: {timeLimitInMinutes}");
-            
-            TSPRec(currBound, 0, 1, currPath, 0, isExcluded); // קריאה ראשונית לפונקציה הרקורסיבית
+
+            TSPRec(currBound, 0, 1, currPath, 0, isExcluded, new Dictionary<int, int>()); // קריאה ראשונית לפונקציה הרקורסיבית
 
            // במידה ולא נמצא מסלול מלא, מחזירים את המסלול החלקי הטוב ביותר
             if (finalRes == int.MaxValue && partialBestLength > 1)
@@ -409,11 +416,14 @@ namespace ParkRoutePlanner
                 Array.Copy(bestPathPartial, 0, partialResult, 0, partialBestLength);
                 partialResult[partialBestLength] = bestPathPartial[0]; // סוגרים את המסלול חזרה להתחלה
 
+
                 Console.WriteLine("לא נמצא מסלול מלא, מחזירים את המסלול החלקי הטוב ביותר.");
                 return new Result
                 {
                     Time = partialBestRes,
-                    IndexRoute = partialResult
+                    IndexRoute = partialResult,
+                    ArrivalTimes = new Dictionary<int, int>(attractionArrivalTimes)
+
                 };
             }
             else
@@ -421,9 +431,12 @@ namespace ParkRoutePlanner
                 Result result = new Result
                 {
                     Time = bestTimePartial,
-                    IndexRoute = new int[bestPathPartial.Length]
+                    IndexRoute = new int[bestPathPartial.Length],
+                    ArrivalTimes = new Dictionary<int, int>(attractionArrivalTimes)
+
                 };
                 Array.Copy(bestPathPartial, result.IndexRoute, bestPathPartial.Length);
+
                 DateTime endTime = DateTime.Now;
                 Console.WriteLine($"התחלתי את החישוב ב: {startTime:HH:mm:ss.fff}");
                 Console.WriteLine($"סיימתי את החישוב ב: {endTime:HH:mm:ss.fff}");

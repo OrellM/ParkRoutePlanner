@@ -10,5 +10,8 @@ namespace ParkRoutePlanner.entity
     {
         public int Time { get; set; }
         public int[] IndexRoute { get; set; }
+        //תוספת
+        public Dictionary<int, int> ArrivalTimes { get; set; } = new();
+
     }
 }

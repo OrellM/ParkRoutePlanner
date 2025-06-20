@@ -29,6 +29,8 @@ public partial class ParkDataContext : DbContext
 
     public virtual DbSet<Visitor> Visitors { get; set; }
 
+    public virtual DbSet<Load> Loads { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 #warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
         => optionsBuilder.UseSqlServer("Server=DESKTOP\\SQLEXPRESS;Database=NewDataPark;Trusted_Connection=True;TrustServerCertificate=True;");
@@ -193,6 +195,18 @@ public partial class ParkDataContext : DbContext
                     });
         });
 
+        modelBuilder.Entity<Load>(entity =>
+        {
+            entity.ToTable("load"); // שם הטבלה במסד הנתונים
+
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Attraction).HasColumnName("attraction").HasMaxLength(100);
+            entity.Property(e => e.Visitors).HasColumnName("visitors");
+            entity.Property(e => e.Timestamp).HasColumnName("timestamp");
+        });
+
         modelBuilder.Entity<VisitStation>(entity =>
         {
             entity.HasKey(e => new { e.VisitId, e.RideId }).HasName("PK__visit_st__5B2438E6F783AF8C");
@@ -245,6 +259,7 @@ public partial class ParkDataContext : DbContext
         });
 
         OnModelCreatingPartial(modelBuilder);
+
     }
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
