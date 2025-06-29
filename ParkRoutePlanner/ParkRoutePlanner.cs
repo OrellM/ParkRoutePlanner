@@ -1,15 +1,19 @@
 ﻿using ParkRoutePlanner.entity;
 using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Data.SqlClient;
 
 namespace ParkRoutePlanner
 {
     public class ParkRoutePlanner
     {
-        //public static TimeOnly openingTime;
-        //public static TimeOnly closingTime;
-        public static TimeOnly openingTime = new TimeOnly(10, 0);
-        public static TimeOnly closingTime = new TimeOnly(23, 0);
+        public static TimeOnly openingTime;
+        public static TimeOnly closingTime;
+
+
+        //public static TimeOnly openingTime = new TimeOnly(10, 0);
+        //public static TimeOnly closingTime = new TimeOnly(23, 40);
        /* public static void SetVisitTimes(string start, string end)
         {
             openingTime = TimeOnly.Parse(start);
@@ -28,6 +32,8 @@ namespace ParkRoutePlanner
         private static int[] rideDuration;
         private static int[] userPreferences;
         private static int startNode;
+        public static Dictionary<int, Result> ActiveUserRoutes = new();
+
 
         static int timeLimitInMinutes; // זמן השהות של המבקר בפארק
 
@@ -36,10 +42,174 @@ namespace ParkRoutePlanner
         private static int[] partialBestPath;
         public static Dictionary<int, int> attractionArrivalTimes = new();
         private static string[] attractionNames;
+        private static int[] attractionCapacities;
+
         private static void CopyToFinal(int[] currPath)
         {
             Array.Copy(currPath, finalPath, N);
             finalPath[N] = currPath[0];
+        }
+
+        /*public static void CheckForRelevantLoadAlerts(int userId)
+        {
+            if (!ActiveUserRoutes.TryGetValue(userId, out Result userRoute))
+                return;
+
+            DateTime now = DateTime.Now;
+            int currentHour = now.Hour;
+
+            string connectionString = "Data Source=DESKTOP\\SQLEXPRESS;Initial Catalog=NewDataPark;Integrated Security=True;";
+
+            foreach (int attractionIndex in userRoute.IndexRoute)
+            {
+                if (!userRoute.ArrivalTimes.TryGetValue(attractionIndex, out int arrivalMinutes))
+                    continue;
+
+                int arrivalHour = (arrivalMinutes / 60) + openingTime.Hour;
+                if (arrivalHour < currentHour || arrivalHour > currentHour + 1)
+                    continue;
+
+                string attractionName = ParkRoutePlanner.attractionNames[attractionIndex];
+                int actualLoad = 0;
+
+                string sql = @"
+            SELECT TOP 1 visitors
+            FROM dbo.load
+            WHERE attraction = @attraction
+              AND DATEPART(HOUR, timestamp) = @hour
+              AND CAST(timestamp AS DATE) = CAST(GETDATE() AS DATE)
+            ORDER BY timestamp DESC";
+
+                using (SqlConnection conn = new SqlConnection(connectionString))
+                using (SqlCommand cmd = new SqlCommand(sql, conn))
+                {
+                    cmd.Parameters.AddWithValue("@attraction", attractionName);
+                    cmd.Parameters.AddWithValue("@hour", arrivalHour);
+
+                    conn.Open();
+                    object result = cmd.ExecuteScalar();
+                    if (result != DBNull.Value && result != null)
+                    {
+                        actualLoad = Convert.ToInt32(result);
+                    }
+                }
+
+                // עומס חזוי
+                double expectedLoad = 0;
+                if (futureLoad.TryGetValue(attractionName, out var loadsByHour) &&
+                    loadsByHour.TryGetValue(arrivalHour.ToString(), out double expected))
+                {
+                    expectedLoad = expected;
+                }
+
+                if (expectedLoad > 0 && actualLoad > expectedLoad * 1.5)
+                {
+                    Console.WriteLine($"⚠️ עומס יתר באטרקציה {attractionName} בשעה {arrivalHour}: בפועל {actualLoad}, צפוי {expectedLoad}");
+                    GlobalData.loadAlerts[userId] = $"📢 עומס חריג במתקן '{attractionName}' בשעה {arrivalHour}: בפועל {actualLoad}, חזוי {expectedLoad}";
+                }
+            }
+        }*/
+
+        public static void CheckForRelevantLoadAlerts(int userId)
+        {
+            if (!ActiveUserRoutes.TryGetValue(userId, out Result userRoute))
+                return;
+
+            string connectionString = "Data Source=DESKTOP\\SQLEXPRESS;Initial Catalog=NewDataPark;Integrated Security=True;";
+
+            foreach (int attractionIndex in userRoute.IndexRoute)
+            {
+                if (!userRoute.ArrivalTimes.TryGetValue(attractionIndex, out int arrivalMinutes))
+                    continue;
+
+                int arrivalHour = (arrivalMinutes / 60) + openingTime.Hour;
+
+                string attractionName = ParkRoutePlanner.attractionNames[attractionIndex];
+                int actualLoad = 0;
+
+                string sql = @"
+            SELECT TOP 1 visitors
+            FROM dbo.load
+            WHERE attraction = @attraction
+              AND DATEPART(HOUR, timestamp) = @hour
+              AND CAST(timestamp AS DATE) = CAST(GETDATE() AS DATE)
+            ORDER BY timestamp DESC";
+
+                using (SqlConnection conn = new SqlConnection(connectionString))
+                using (SqlCommand cmd = new SqlCommand(sql, conn))
+                {
+                    cmd.Parameters.AddWithValue("@attraction", attractionName);
+                    cmd.Parameters.AddWithValue("@hour", arrivalHour);
+
+                    conn.Open();
+                    object result = cmd.ExecuteScalar();
+                    if (result != DBNull.Value && result != null)
+                    {
+                        actualLoad = Convert.ToInt32(result);
+                    }
+                }
+
+                // עומס חזוי
+                double expectedLoad = 0;
+                if (futureLoad.TryGetValue(attractionName, out var loadsByHour) &&
+                    loadsByHour.TryGetValue(arrivalHour.ToString(), out double expected))
+                {
+                    expectedLoad = expected;
+                }
+
+                Console.WriteLine($"🔍 בדיקה למתקן '{attractionName}' בשעה {arrivalHour}: בפועל {actualLoad}, חזוי {expectedLoad}");
+
+                if (expectedLoad > 0 && actualLoad > expectedLoad * 1.5)
+                {
+                    Console.WriteLine($"⚠️ עומס יתר במתקן {attractionName} בשעה {arrivalHour}: בפועל {actualLoad}, חזוי {expectedLoad}");
+                    GlobalData.loadAlerts[userId] = $"📢 עומס חריג במתקן '{attractionName}' בשעה {arrivalHour}: בפועל {actualLoad}, חזוי {expectedLoad}";
+                }
+            }
+        }
+
+
+
+        private static void AddVisitorToLoad(int attractionIndex, int arrivalTimeHour)
+        {
+            if (!ParkLoadTracker.DynamicLoadMatrix.ContainsKey(attractionIndex))
+                ParkLoadTracker.DynamicLoadMatrix[attractionIndex] = new Dictionary<int, int>();
+
+            if (!ParkLoadTracker.DynamicLoadMatrix[attractionIndex].ContainsKey(arrivalTimeHour))
+                ParkLoadTracker.DynamicLoadMatrix[attractionIndex][arrivalTimeHour] = 0;
+
+            ParkLoadTracker.DynamicLoadMatrix[attractionIndex][arrivalTimeHour]++;
+        }
+
+        private static bool CanAddVisitor(int attractionIndex, int arrivalTimeHour, Dictionary<string, Dictionary<string, double>> futureLoad)
+        {
+            // בדיקה אם יש עומס נוכחי במטריצה הדינמית
+            int currentLoad = 0;
+            if (ParkLoadTracker.DynamicLoadMatrix.TryGetValue(attractionIndex, out var hourDict))
+            {
+                if (hourDict.TryGetValue(arrivalTimeHour, out var load))
+                {
+                    currentLoad = load;
+                }
+            }
+
+            // ✅ שימוש בשם המתקן במקום מספר
+            string attractionName = attractionNames[attractionIndex];
+            string hourKey = arrivalTimeHour.ToString();
+
+            double capacity = 0;
+            if (futureLoad.ContainsKey(attractionName) && futureLoad[attractionName].ContainsKey(hourKey))
+            {
+                capacity = futureLoad[attractionName][hourKey];
+            }
+            else
+            {
+                Console.WriteLine($"⚠️ אין נתוני עומס עתידי למתקן {attractionName} בשעה {hourKey}");
+                return false; // או true אם את רוצה להיות סלחנית
+            }
+
+            Console.WriteLine($"✅ בדיקת עומס למתקן {attractionName} ({attractionIndex}) בשעה {hourKey}: נוכחי = {currentLoad}, קיבולת = {capacity}");
+
+            return currentLoad < capacity;
         }
 
 
@@ -132,7 +302,8 @@ namespace ParkRoutePlanner
          }*/
         private static int GetFutureLoad(int attractionIndex, int time)
         {
-            TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);
+            //TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);
+            TimeOnly now = openingTime;
             TimeOnly targetTime = now.AddMinutes(time);
 
             if (targetTime.Minute > 0 || targetTime.Second > 0)
@@ -265,15 +436,39 @@ namespace ParkRoutePlanner
                     int temp = currBound;
                     int tempTime = currTime; // שומרים זמנית את הזמן הנוכחי
                     int tempWeight = currWeight; // שומרים זמנית את המשקל הנוכחי
-                    visited[i] = true;// סומן שבוקר כבר
+                    //visited[i] = true;// סומן שבוקר כבר
                     int travelTime = adjMatrix[currPath[level - 1], i]; //זמן הנסיעה מהאטרקציה הנוכחית
 
                     int arrivalTime = currWeight + travelTime;
                     arrivalTimes[i] = arrivalTime;
 
-                    int rideTime = rideDuration[i]; //משך זמן שהייה באטרקציה
-                    int load = GetFutureLoad(i, currTime + travelTime); // המתנה משוערת בעת ההגעה
-                    int waitTime = (load / 10) * rideTime; //חישוב זמן ההמתנה
+                    int arrivalHour = (int)Math.Ceiling((currTime + travelTime) / 60.0) + openingTime.Hour;
+
+
+                    // בדיקה אם אפשר להוסיף מבקר למתקן בשעה הזאת
+                    if (!CanAddVisitor(i, arrivalHour, futureLoad))
+                    {
+                        Console.WriteLine($"[SKIP] Capacity reached for attraction {i} at hour {arrivalHour}");
+                        visited[i] = false;
+                        continue; // דלג על המתקן כי העומס מלא
+                    }
+
+
+                    //int rideTime = rideDuration[i]; //משך זמן שהייה באטרקציה
+                    //int load = GetFutureLoad(i, currTime + travelTime); // המתנה משוערת בעת ההגעה
+                    //int waitTime = (load / 10) * rideTime; //חישוב זמן ההמתנה
+
+                    int rideTime = rideDuration[i];
+                    int load = GetFutureLoad(i, currTime + travelTime);
+                    int capacity = attractionCapacities[i];
+
+                    int waitTime = 0;
+                    if (capacity > 0 && rideTime > 0)
+                    {
+                        int cyclesNeeded = (int)Math.Ceiling((double)load / capacity);
+                        waitTime = cyclesNeeded * rideTime;
+                    }
+
 
                     Console.WriteLine($"[LOAD] Time: {currTime + travelTime}, Attraction: {i}, Load: {load}");
 
@@ -363,10 +558,11 @@ namespace ParkRoutePlanner
         }
 
 
-        public static Result TSP(int[,] distances, int[] durations, Dictionary<string, Dictionary<string, double>> futureLoads, int[] preferences, int start, bool[] isExcluded, string[] attractionNames)
+        public static Result TSP(int[,] distances, int[] durations, Dictionary<string, Dictionary<string, double>> futureLoads, int[] preferences, int start, bool[] isExcluded, string[] attractionNames, int[] capacities, int userId)
         {
             DateTime startTime = DateTime.Now;
-            TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);  // הזמן הנוכחי
+            //TimeOnly now = TimeOnly.FromDateTime(DateTime.Now);  // הזמן הנוכחי
+            TimeOnly now = openingTime;
 
             if (now < openingTime || now >= closingTime) // בדיקת שעות פתיחה
             {
@@ -379,6 +575,8 @@ namespace ParkRoutePlanner
             rideDuration = durations; // זמני רכיבה בכל אטרקציה
             futureLoad = futureLoads; // עומסים עתידיים לכל אטרקציה וזמן
             userPreferences = preferences; // העדפות המשתמש
+            attractionCapacities = capacities;
+
             ParkRoutePlanner.attractionNames = attractionNames;//
 
             startNode = start; // נקודת התחלה במסלול
@@ -404,7 +602,7 @@ namespace ParkRoutePlanner
             bestPathPartial[0] = startNode;
 
             // הגדרת זמן השהות של המשתמש בפארק
-            timeLimitInMinutes = (int)(closingTime.ToTimeSpan() - now.ToTimeSpan()).TotalMinutes;
+            timeLimitInMinutes = (int)(closingTime.ToTimeSpan() - openingTime.ToTimeSpan()).TotalMinutes;
             Console.WriteLine($"Time limit in minutes: {timeLimitInMinutes}");
 
             TSPRec(currBound, 0, 1, currPath, 0, isExcluded, new Dictionary<int, int>()); // קריאה ראשונית לפונקציה הרקורסיבית
@@ -416,15 +614,31 @@ namespace ParkRoutePlanner
                 Array.Copy(bestPathPartial, 0, partialResult, 0, partialBestLength);
                 partialResult[partialBestLength] = bestPathPartial[0]; // סוגרים את המסלול חזרה להתחלה
 
+                //לצורך עדכון העומסים לפי המסלול שנבחר 
+                var arrivalTimes = new Dictionary<int, int>(attractionArrivalTimes);
+
+                // ✅ עדכון העומסים במסלול החלקי
+                for (int i = 0; i < partialBestLength; i++) // עד לפני החזרה לנקודת ההתחלה
+                {
+                    int attractionIndex = partialResult[i];
+                    if (arrivalTimes.TryGetValue(attractionIndex, out int arrivalTimeInMinutes))
+                    {
+                        int arrivalHour = (arrivalTimeInMinutes + 59) / 60 + openingTime.Hour;
+                        ParkLoadTracker.DynamicLoadMatrix[attractionIndex][arrivalHour]++;
+                    }
+                }
 
                 Console.WriteLine("לא נמצא מסלול מלא, מחזירים את המסלול החלקי הטוב ביותר.");
-                return new Result
+
+                ActiveUserRoutes[userId] = new Result
                 {
                     Time = partialBestRes,
                     IndexRoute = partialResult,
                     ArrivalTimes = new Dictionary<int, int>(attractionArrivalTimes)
 
                 };
+                return ActiveUserRoutes[userId];
+
             }
             else
             {
@@ -436,6 +650,20 @@ namespace ParkRoutePlanner
 
                 };
                 Array.Copy(bestPathPartial, result.IndexRoute, bestPathPartial.Length);
+                // לצורך עידכון העומסים לפי המסלול שנבחר
+                var arrivalTimes = result.ArrivalTimes;
+                var route = result.IndexRoute;
+
+                for (int i = 0; i < route.Length - 1; i++) // עד לפני סגירת המעגל
+                {
+                    int attractionIndex = route[i];
+                    if (arrivalTimes.TryGetValue(attractionIndex, out int arrivalTimeInMinutes))
+                    {
+                        int arrivalHour = (arrivalTimeInMinutes + 59) / 60 + openingTime.Hour;
+                        ParkLoadTracker.DynamicLoadMatrix[attractionIndex][arrivalHour]++;
+                    }
+                }
+                ActiveUserRoutes[userId] = result;
 
                 DateTime endTime = DateTime.Now;
                 Console.WriteLine($"התחלתי את החישוב ב: {startTime:HH:mm:ss.fff}");

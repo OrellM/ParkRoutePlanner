@@ -28,15 +28,48 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 
 var app = builder.Build();
+//צריך לטעון
+LoadManager.LoadDailyLoads();
 
-List<string> loadAlerts = new List<string>();
+//Dictionary<int, string> loadAlerts = new();
 
 app.UseCors("AllowReactApp");  // מפעילים את מדיניות CORS
 
-app.MapGet("/api/load-alerts", () =>
+AlertScheduler.Start();
+
+/*app.MapGet("/api/load-alerts", () =>
 {
     return Results.Json(loadAlerts);
+
 });
+app.MapGet("/api/alerts/{userId}", (int userId) =>
+{
+    if (GlobalData.loadAlerts.TryGetValue(userId, out string alert))
+    {
+        GlobalData.loadAlerts.Remove(userId);
+        return Results.Json(new { alert });
+    }
+
+    return Results.Json(new { alert = "" });
+});*/
+
+app.MapGet("/api/alerts/{userId}", (int userId) =>
+{
+    string alert;
+
+    if (GlobalData.loadAlerts.TryGetValue(userId, out alert))
+    {
+        GlobalData.loadAlerts.Remove(userId);
+    }
+    else
+    {
+        alert = "✅ הכל תקין, אין עומסים כרגע"; // פופאפ תמידי
+    }
+
+    return Results.Json(new { alert });
+});
+
+
 string FormatArrivalTime(int baseHour, int baseMinute, int minutesFromStart)
 {
     int totalMinutes = baseHour * 60 + baseMinute + minutesFromStart;
@@ -51,16 +84,14 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
     Console.WriteLine("🧾 JSON שהתקבל מהקליינט:");
     Console.WriteLine(JsonSerializer.Serialize(visitor));
     // --- קריאת קובץ עומסים והמרה למילון מקונן ---
-    string json = File.ReadAllText("loads-2025-06-12.json");
+    /*string json = File.ReadAllText("loads-2025-06-12.json");
     Dictionary<string, Dictionary<string, double>> futureLoads =
         JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, double>>>(json);
+    */
+    var futureLoads = LoadManager.loadsData;
+    ParkRoutePlanner.ParkRoutePlanner.openingTime = TimeOnly.Parse(visitor.VisitStartTime);
+    ParkRoutePlanner.ParkRoutePlanner.closingTime = TimeOnly.Parse(visitor.VisitEndTime);
 
-    if (futureLoads != null &&
-        futureLoads.ContainsKey("אנקונדה") &&
-        futureLoads["אנקונדה"].ContainsKey("13"))
-    {
-        Console.WriteLine("עומס באנוקונדה ב-13: " + futureLoads["אנקונדה"]["13"]);
-    }
 
     // שליפת נתונים מה-DB
     string connectionString = "Data Source=DESKTOP\\SQLEXPRESS;Initial Catalog=NewDataPark;Integrated Security=True;";
@@ -70,6 +101,7 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
     List<int> minAgesList = new List<int>();
     List<int> maxAgesList = new List<int>();
     List<int> minHeightsList = new List<int>();
+    List<int> capacityList = new List<int>();
 
     using (SqlConnection connection = new SqlConnection(connectionString))
     {
@@ -77,7 +109,7 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
 
         // שליפת מתקנים
         string queryRides = @"
-            SELECT ride_id, ride_name, avg_duration_minutes, min_age, max_age, min_height_cm
+            SELECT ride_id, ride_name, avg_duration_minutes, min_age, max_age, min_height_cm, capacity
 
             FROM dbo.rides";
 
@@ -93,6 +125,8 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
                 minAgesList.Add(reader["min_age"] == DBNull.Value ? 0 : Convert.ToInt32(reader["min_age"]));
                 maxAgesList.Add(reader["max_age"] == DBNull.Value ? 120 : Convert.ToInt32(reader["max_age"]));
                 minHeightsList.Add(reader["min_height_cm"] == DBNull.Value ? 0 : Convert.ToInt32(reader["min_height_cm"]));
+                capacityList.Add(reader["capacity"] == DBNull.Value ? 0 : Convert.ToInt32(reader["capacity"]));
+
             }
         }
 
@@ -104,13 +138,20 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
         minAgesList.Insert(0, 0);    // שער כניסה - אין הגבלת גיל מינימלי
         maxAgesList.Insert(0, 120);  // שער כניסה - אין הגבלת גיל מקסימלי
         minHeightsList.Insert(0, 0); // שער כניסה - אין הגבלת גובה
+        capacityList.Insert(0, 9999); // שער כניסה – קיבולת פיקטיבית גבוהה
 
 
         int n = rideIds.Count;
         string[] attractionNames = attractionNamesList.ToArray();
         int[] durations = durationsList.ToArray();
+        int[] capacities = capacityList.ToArray();
 
-        
+
+        if (ParkLoadTracker.DynamicLoadMatrix.Count == 0)
+        {
+            ParkLoadTracker.InitializeMatrix(attractionNames.Length);
+        }
+
 
         // ✅ אתחול מטריצת מרחקים עם שער כניסה
         int[,] distances = new int[n, n];
@@ -229,8 +270,9 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
             Console.WriteLine("🚨 התראה: " + alert);
         }
 
-        loadAlerts.Clear();
-        loadAlerts.AddRange(alerts);
+        GlobalData.loadAlerts.Clear();
+        GlobalData.loadAlerts[1] = string.Join("\n", alerts);
+
 
 
         int[] preferences = new int[attractionNames.Length];
@@ -250,9 +292,9 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
 
         int startNode = 0;
 
-        // ParkRoutePlanner.ParkRoutePlanner.SetVisitTimes(visitor.VisitStartTime, visitor.VisitEndTime);
+       // ParkRoutePlanner.ParkRoutePlanner.SetVisitTimes(visitor.VisitStartTime, visitor.VisitEndTime);
 
-        var res = ParkRoutePlanner.ParkRoutePlanner.TSP(distances, durations, futureLoads, preferences, startNode, isExcluded, attractionNames);
+        var res = ParkRoutePlanner.ParkRoutePlanner.TSP(distances, durations, futureLoads, preferences, startNode, isExcluded, attractionNames, capacities, 1);
 
         string[] namedRoute = new string[res.IndexRoute.Length];
         for (int i = 0; i < res.IndexRoute.Length; i++)
@@ -298,6 +340,32 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
             Time = res.Time,
             RidesRoute = routeStops
         };
+
+
+        // 🔍 הדפסת בדיקת עומס אחרון מ־SQL
+        Console.WriteLine("\n📊 בדיקה ידנית - עומס אחרון מגלשות מים בשעה 16:00 בתאריך 2025-06-26");
+
+        string sql = @"
+    SELECT TOP 1 visitors
+    FROM dbo.load
+    WHERE attraction = N'מגלשות מים'
+      AND timestamp = '2025-06-26 16:00:00.000'
+    ORDER BY id DESC";
+
+        using (SqlCommand cmd = new SqlCommand(sql, connection))
+        {
+            object resultObj = cmd.ExecuteScalar();
+            if (resultObj != DBNull.Value && resultObj != null)
+            {
+                int visitors = Convert.ToInt32(resultObj);
+                Console.WriteLine($"📈 עומס שנשלף: {visitors} מבקרים");
+            }
+            else
+            {
+                Console.WriteLine("❌ לא נמצאו נתונים לעומס האחרון");
+            }
+        }
+
 
         return Results.Json(result);
 
