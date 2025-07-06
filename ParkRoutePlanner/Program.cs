@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Text.Json;
 
+
+
 var builder = WebApplication.CreateBuilder(args);
 
 // מוסיפים מדיניות CORS
@@ -21,6 +23,14 @@ builder.Services.AddCors(options =>
         });
 });
 
+var config = builder.Configuration;
+
+int walkingSpeed = int.Parse(config["Settings:WalkingSpeed"]);
+int infinityDistance = int.Parse(config["Settings:InfinityDistance"]);
+int gateCapacity = int.Parse(config["Settings:GateCapacity"]);
+double overloadThreshold = double.Parse(config["Settings:OverloadThreshold"]);
+
+
 // קובעים פורט ספציפי, לדוגמה 5001
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -34,6 +44,9 @@ LoadManager.LoadDailyLoads();
 //Dictionary<int, string> loadAlerts = new();
 
 app.UseCors("AllowReactApp");  // מפעילים את מדיניות CORS
+
+AlertScheduler.Initialize(builder.Configuration);
+
 
 AlertScheduler.Start();
 
@@ -81,6 +94,7 @@ string FormatArrivalTime(int baseHour, int baseMinute, int minutesFromStart)
 
 app.MapPost("/api/visitor", (VisitorModel visitor) =>
 {
+
     Console.WriteLine("🧾 JSON שהתקבל מהקליינט:");
     Console.WriteLine(JsonSerializer.Serialize(visitor));
     // --- קריאת קובץ עומסים והמרה למילון מקונן ---
@@ -88,9 +102,16 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
     Dictionary<string, Dictionary<string, double>> futureLoads =
         JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, double>>>(json);
     */
+    //var planner = new global::ParkRoutePlanner.ParkRoutePlanner();
+    var config = builder.Configuration;
+    var planner = new ParkRoutePlanner.ParkRoutePlanner(config);
+
     var futureLoads = LoadManager.loadsData;
-    ParkRoutePlanner.ParkRoutePlanner.openingTime = TimeOnly.Parse(visitor.VisitStartTime);
-    ParkRoutePlanner.ParkRoutePlanner.closingTime = TimeOnly.Parse(visitor.VisitEndTime);
+    //ParkRoutePlanner.ParkRoutePlanner.openingTime = TimeOnly.Parse(visitor.VisitStartTime);
+    //ParkRoutePlanner.ParkRoutePlanner.closingTime = TimeOnly.Parse(visitor.VisitEndTime);
+    planner.OpeningTime = TimeOnly.Parse(visitor.VisitStartTime);
+    planner.ClosingTime = TimeOnly.Parse(visitor.VisitEndTime);
+
 
 
     // שליפת נתונים מה-DB
@@ -138,7 +159,8 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
         minAgesList.Insert(0, 0);    // שער כניסה - אין הגבלת גיל מינימלי
         maxAgesList.Insert(0, 120);  // שער כניסה - אין הגבלת גיל מקסימלי
         minHeightsList.Insert(0, 0); // שער כניסה - אין הגבלת גובה
-        capacityList.Insert(0, 9999); // שער כניסה – קיבולת פיקטיבית גבוהה
+        //capacityList.Insert(0, 9999); // שער כניסה – קיבולת פיקטיבית גבוהה
+        capacityList.Insert(0, gateCapacity);
 
 
         int n = rideIds.Count;
@@ -155,7 +177,8 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
 
         // ✅ אתחול מטריצת מרחקים עם שער כניסה
         int[,] distances = new int[n, n];
-        int INF = 999999;
+        //int INF = 999999;
+        int INF = infinityDistance;
         for (int i = 0; i < n; i++)
             for (int j = 0; j < n; j++)
                 distances[i, j] = (i == j) ? 0 : INF;
@@ -174,7 +197,9 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
 
                 int fromIndex = rideIds.IndexOf(fromId);
                 int toIndex = rideIds.IndexOf(toId);
-                int walkingTimeMinutes = (int)Math.Ceiling(distance / 80.0);
+                //int walkingTimeMinutes = (int)Math.Ceiling(distance / 80.0);
+                int walkingTimeMinutes = (int)Math.Ceiling(distance / (double)walkingSpeed);
+
 
                 if (fromIndex != -1 && toIndex != -1)
                 {
@@ -220,6 +245,14 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
 
 
         }
+        // אחרי שמילאת את isExcluded...
+        List<int> allowedAttractions = new();
+        for (int i = 0; i < isExcluded.Length; i++)
+        {
+            if (!isExcluded[i])
+                allowedAttractions.Add(i);
+        }
+
         // סינון לפי גיל וגובה
         for (int i = 0; i < attractionNamesList.Count; i++)
         {
@@ -256,7 +289,9 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
                         double predicted = futureLoads[attraction][hourKey];
                         double percent = (actual - predicted) / predicted;
 
-                        if (percent > 0.3) // יותר מ-30% עומס
+                        //if (percent > 0.3) // יותר מ-30% עומס
+                        if (percent > overloadThreshold)
+
                         {
                             alerts.Add($"📈 עומס חריג במתקן '{attraction}' בשעה {hourKey}: בפועל {actual}, חזוי {predicted}");
                         }
@@ -292,9 +327,11 @@ app.MapPost("/api/visitor", (VisitorModel visitor) =>
 
         int startNode = 0;
 
-       // ParkRoutePlanner.ParkRoutePlanner.SetVisitTimes(visitor.VisitStartTime, visitor.VisitEndTime);
+        // ParkRoutePlanner.ParkRoutePlanner.SetVisitTimes(visitor.VisitStartTime, visitor.VisitEndTime);
 
-        var res = ParkRoutePlanner.ParkRoutePlanner.TSP(distances, durations, futureLoads, preferences, startNode, isExcluded, attractionNames, capacities, 1);
+        //var res = ParkRoutePlanner.ParkRoutePlanner.TSP(distances, durations, futureLoads, preferences, startNode, isExcluded, attractionNames, capacities, 1);
+        var res = planner.TSP(distances, durations, futureLoads, preferences, startNode, isExcluded, attractionNames, capacities, 1, allowedAttractions);
+
 
         string[] namedRoute = new string[res.IndexRoute.Length];
         for (int i = 0; i < res.IndexRoute.Length; i++)

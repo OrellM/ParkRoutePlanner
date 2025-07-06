@@ -1,5 +1,7 @@
+
 using Microsoft.AspNetCore.Mvc;
 using ParkRoutePlanner.Models;
+using Microsoft.Extensions.Configuration;
 
 namespace ParkRoutePlanner.Controllers
 {
@@ -7,6 +9,13 @@ namespace ParkRoutePlanner.Controllers
     [Route("api/[controller]")]
     public class VisitorController : ControllerBase
     {
+        private readonly IConfiguration _config;
+
+        public VisitorController(IConfiguration config)
+        {
+            _config = config;
+        }
+
         [HttpPost]
         public IActionResult PostVisitor([FromBody] VisitorModel visitor)
         {
@@ -15,9 +24,14 @@ namespace ParkRoutePlanner.Controllers
             Console.WriteLine("Visit Time: " + visitor.VisitStartTime + " to " + visitor.VisitEndTime);
             Console.WriteLine("Preferred Attractions: " + string.Join(", ", visitor.PreferredAttractions));
 
-            ParkRoutePlanner.openingTime = TimeOnly.Parse(visitor.VisitStartTime);
-            ParkRoutePlanner.closingTime = TimeOnly.Parse(visitor.VisitEndTime);
+            // ?? יצירת מתכנן עם קונפיגורציה
+            var planner = new ParkRoutePlanner(_config);
 
+            // ? הגדרת שעות ביקור
+            planner.OpeningTime = TimeOnly.Parse(visitor.VisitStartTime);
+            planner.ClosingTime = TimeOnly.Parse(visitor.VisitEndTime);
+
+            // ?? החזרה ללקוח
             return Ok(new { message = "Visitor saved successfully" });
         }
     }
